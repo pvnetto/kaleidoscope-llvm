@@ -8,13 +8,13 @@ namespace Parser {
 
     // #### AST parsers
     NumberASTPtr ParseNumberExpr();
-    ExprASTPtr ParseIdentifierExpr();
+    ExprPtr ParseIdentifierExpr();
 
-    ExprASTPtr ParsePrimary();
-    ExprASTPtr ParseExpr();
-	ExprASTPtr ParseExprSemicolon();
-    ExprASTPtr ParseParenthesisExpr();
-    ExprASTPtr ParseBinOpRHS(int minPrecedence, ExprASTPtr lhs);
+    ExprPtr ParsePrimary();
+    ExprPtr ParseExpr();
+	ExprPtr ParseExprSemicolon();
+    ExprPtr ParseParenthesisExpr();
+    ExprPtr ParseBinOpRHS(int minPrecedence, ExprPtr lhs);
 	FunctionASTPtr ParseTopLevelExpr();
 
     PrototypeASTPtr ParseExtern();
@@ -23,7 +23,7 @@ namespace Parser {
 
 
     // #### Helpers
-    ExprASTPtr LogError(const char* msg);
+    ExprPtr LogError(const char* msg);
 
     template <typename T>
     std::unique_ptr<T> LogErrorT(const char* msg) {

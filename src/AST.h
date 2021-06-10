@@ -10,19 +10,26 @@
 
 namespace Parser {
 
-	// Generic AST node for expressions
-	class ExprAST {
+	class Stmt {
 	public:
-		virtual ~ExprAST() {}
+		virtual ~Stmt() = default;
 
 		virtual llvm::Value *GenerateCode() = 0;
 		virtual void Dump(int depth) const = 0;
 	};
+	using StmtPtr = std::unique_ptr<Stmt>;
 
-	using ExprASTPtr = std::unique_ptr<ExprAST>;
+
+	// Generic AST node for expressions. All expressions are also statements.
+	class Expr : public Stmt {
+	public:
+		virtual ~Expr() {}
+	};
+	using ExprPtr = std::unique_ptr<Expr>;
+
 
 	// Numeric literals
-	class NumberExprAST : public ExprAST {
+	class NumberExprAST : public Expr {
 	public:
 		NumberExprAST(double value);
 		virtual llvm::Value *GenerateCode() override;
@@ -33,8 +40,9 @@ namespace Parser {
 	};
 	using NumberASTPtr = std::unique_ptr<NumberExprAST>;
 
-	// Variables
-	class VariableExprAST : public ExprAST {
+	// variable
+	//		::= <id>
+	class VariableExprAST : public Expr {
 	public:
 		VariableExprAST(const std::string &name);
 		virtual llvm::Value *GenerateCode() override;
@@ -46,50 +54,65 @@ namespace Parser {
 
 	// binary expressions (i.e 1 + 2)
 	//		::= <lhs_expr> <operator> <rhs_expr>
-	class BinaryExprAST : public ExprAST {
+	class BinaryExprAST : public Expr {
 	public:
-		BinaryExprAST(char op, ExprASTPtr lhs, ExprASTPtr rhs);
+		BinaryExprAST(char op, ExprPtr lhs, ExprPtr rhs);
 		virtual llvm::Value *GenerateCode() override;
 		virtual void Dump(int depth) const override;
 
 	private:
 		char m_op;               // +, -, *, /
-		ExprASTPtr m_lhs, m_rhs; // right/left-hand sides of expression
+		ExprPtr m_lhs, m_rhs; // right/left-hand sides of expression
 	};
 
 	// function call
 	//		::= <identifier>(<args>)
-	class CallExprAST : public ExprAST {
+	class CallExprAST : public Expr {
 	public:
-		CallExprAST(const std::string &name, std::vector<ExprASTPtr> args);
+		CallExprAST(const std::string &name, std::vector<ExprPtr> args);
 		virtual llvm::Value *GenerateCode() override;
 		virtual void Dump(int depth) const override;
 
 	private:
 		std::string m_calleeName;
-		std::vector<ExprASTPtr> m_args;
+		std::vector<ExprPtr> m_args;
 	};
 
-	//  if
-	//		::= if (<cond>) <expr>
-	//		::= if (<cond>) <expr> else <expr>
-	class IfExprAST : public ExprAST {
-	public:
-		IfExprAST(ExprASTPtr cond, ExprASTPtr el);
-		virtual llvm::Value *GenerateCode() override;
-		virtual void Dump(int depth) const override;
+	//// compound statement
+	////		::= <stmt>, <stmt>, ...
+	//class CompoundStmt : public Stmt {
+	//public:
+	//	CompoundStmt() = default;
+	//	CompoundStmt(std::vector<StmtPtr> stmts);
+	//	virtual llvm::Value *GenerateCode() override;
+	//	virtual void Dump(int depth) const override;
 
-		inline bool HasElse() { return m_else != nullptr; }
+	//private:
+	//	std::vector<StmtPtr> m_statements;
+	//};
+	//using CompoundStmtPtr = std::unique_ptr<CompoundStmt>;
 
-	private:
-		ExprASTPtr m_condition, m_else;
-	};
+
+	////  if
+	////		::= if (<cond>) <expr>
+	////		::= if (<cond>) <expr> else <expr>
+	//class IfStmt : public Stmt {
+	//public:
+	//	IfStmt(ExprPtr cond, CompoundStmtPtr elseStmt);
+
+	//	inline bool HasElseStmt() { return m_else != nullptr; }
+
+	//private:
+	//	ExprPtr m_condition;
+	//	CompoundStmtPtr m_else;		// 'else if' is just a special case of 'else'
+	//};
 	
 
-	// Function prototypes
-	class PrototypeAST {
+	// prototypes
+	//		::= fn <id>(<args>)
+	class PrototypeDeclAST {
 	public:
-		PrototypeAST(std::string name, std::vector<std::string> params);
+		PrototypeDeclAST(std::string name, std::vector<std::string> params);
 
 		inline std::string GetName() const { return m_name; }
 
@@ -100,25 +123,27 @@ namespace Parser {
 		std::string m_name;
 		std::vector<std::string> m_params;
 	};
-	using PrototypeASTPtr = std::unique_ptr<PrototypeAST>;
+	using PrototypeASTPtr = std::unique_ptr<PrototypeDeclAST>;
 
-	// Function declarations
-	class FunctionAST {
+
+	// declarations
+	//		::= <prototype> { <stmt_list> }
+	class FunctionDeclAST {
 	public:
-		FunctionAST(PrototypeASTPtr prototype, ExprASTPtr body);
+		FunctionDeclAST(PrototypeASTPtr prototype, ExprPtr body);
 
 		llvm::Function * GenerateCode();
 		void Dump(int depth) const;
 
 	private:
 		PrototypeASTPtr m_prototype;
-		ExprASTPtr m_body;
+		ExprPtr m_body;
 	};
-	using FunctionASTPtr = std::unique_ptr<FunctionAST>;
+	using FunctionASTPtr = std::unique_ptr<FunctionDeclAST>;
 
-	class TranslationUnitAST {
+	class TranslationUnitDeclAST {
 	public:
-		TranslationUnitAST(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs);
+		TranslationUnitDeclAST(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs);
 		void GenerateCode();
 		void Dump() const;
 
@@ -128,5 +153,5 @@ namespace Parser {
 		std::vector<PrototypeASTPtr> m_prototypes;
 
 	};
-	using TranslationUnitASTPtr = std::unique_ptr<TranslationUnitAST>;
+	using TranslationUnitASTPtr = std::unique_ptr<TranslationUnitDeclAST>;
 }

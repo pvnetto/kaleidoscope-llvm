@@ -43,8 +43,8 @@ namespace Parser {
 					NextToken();
 					break;
 				case Lexer::Token_EndOfFile: {
-					std::unique_ptr<TranslationUnitAST> unit =
-					    std::make_unique<TranslationUnitAST>("main", std::move(m_prototypes), std::move(m_functions));
+					std::unique_ptr<TranslationUnitDeclAST> unit =
+					    std::make_unique<TranslationUnitDeclAST>("main", std::move(m_prototypes), std::move(m_functions));
 					unit->Dump();
 					return std::move(unit);
 				}
@@ -90,7 +90,7 @@ namespace Parser {
 
 	// variable ::= <identifier>
 	// function call ::= <identifier>()
-	ExprASTPtr ParseIdentifierExpr() {
+	ExprPtr ParseIdentifierExpr() {
 		std::string identifier = Lexer::GetIdentifier();
 		NextToken();
 
@@ -98,7 +98,7 @@ namespace Parser {
 		if (s_state.CurrentToken == '(') {
 			NextToken();
 
-			std::vector<ExprASTPtr> args;
+			std::vector<ExprPtr> args;
 			while (s_state.CurrentToken != ')' && s_state.CurrentToken != ',') {
 				if (auto arg = ParseExpr()) {
 					args.push_back(std::move(arg));
@@ -127,7 +127,7 @@ namespace Parser {
 		}
 	}
 
-	ExprASTPtr ParsePrimary() {
+	ExprPtr ParsePrimary() {
 		switch (s_state.CurrentToken) {
 			case Lexer::Token_Number:
 				return ParseNumberExpr();
@@ -143,13 +143,13 @@ namespace Parser {
 	// Parses binary expressions
 	// <binop> ::= <operand> <operator> <operand>
 	// <binop> ::= <primary> <binop>
-	ExprASTPtr ParseExpr() {
+	ExprPtr ParseExpr() {
 		if (auto lhs = ParsePrimary())
 			return ParseBinOpRHS(0, std::move(lhs));
 		return nullptr;
 	}
 
-	ExprASTPtr ParseExprSemicolon() {
+	ExprPtr ParseExprSemicolon() {
 		if (auto expr = ParseExpr()) {
 			if (HasSemicolon()) {
 				return expr;
@@ -162,7 +162,7 @@ namespace Parser {
 	}
 
 	// Based on pseudocode from: https://en.wikipedia.org/wiki/Operator-precedence_parser
-	ExprASTPtr ParseBinOpRHS(int minPrecedence, ExprASTPtr lhs) {
+	ExprPtr ParseBinOpRHS(int minPrecedence, ExprPtr lhs) {
 		int lookahead = s_state.CurrentToken;
 		while (GetTokenPrecedence(lookahead) >= minPrecedence) {
 			int op = lookahead;
@@ -185,7 +185,7 @@ namespace Parser {
 
 	// Builds expressions between parenthesis. Note that the parenthesis are
 	// never added to the AST, they simply provide grouping.
-	ExprASTPtr ParseParenthesisExpr() {
+	ExprPtr ParseParenthesisExpr() {
 		NextToken(); // consumes (
 		if (auto v = ParseExpr()) {
 			if (s_state.CurrentToken == ')') {
@@ -201,8 +201,8 @@ namespace Parser {
 	FunctionASTPtr ParseTopLevelExpr() {
 		// Top-level expressions are represented as anonymous functions
 		if (auto expr = ParseExprSemicolon()) {
-			auto anonProto = std::make_unique<PrototypeAST>(ANON_EXPR_NAME, std::vector<std::string>());
-			return std::make_unique<FunctionAST>(std::move(anonProto), std::move(expr));
+			auto anonProto = std::make_unique<PrototypeDeclAST>(ANON_EXPR_NAME, std::vector<std::string>());
+			return std::make_unique<FunctionDeclAST>(std::move(anonProto), std::move(expr));
 		}
 
 		return nullptr;
@@ -212,7 +212,7 @@ namespace Parser {
 		NextToken();
 
 		if (auto proto = ParsePrototype()) {
-			return HasSemicolon() ? std::move(proto) : LogErrorT<PrototypeAST>("Expected ;\n");
+			return HasSemicolon() ? std::move(proto) : LogErrorT<PrototypeDeclAST>("Expected ;\n");
 		}
 		return nullptr;
 	}
@@ -254,7 +254,7 @@ namespace Parser {
 	// args ::= <id>, ...
 	PrototypeASTPtr ParsePrototype() {
 		if (s_state.CurrentToken != Lexer::Token_Identifier)
-			return LogErrorT<PrototypeAST>("Expected function identifier");
+			return LogErrorT<PrototypeDeclAST>("Expected function identifier");
 
 		// Parses prototype identifier
 		std::string funcIdentifier = Lexer::GetIdentifier();
@@ -264,31 +264,31 @@ namespace Parser {
 		ErrorMsg err;
 		std::vector<std::string> params = ParseParameterList(err);
 		if (err.Failed)
-			return LogErrorT<PrototypeAST>(err.Msg.c_str());
-		return std::make_unique<PrototypeAST>(funcIdentifier, std::move(params));
+			return LogErrorT<PrototypeDeclAST>(err.Msg.c_str());
+		return std::make_unique<PrototypeDeclAST>(funcIdentifier, std::move(params));
 	}
 
 	FunctionASTPtr ParseDefinition() {
 		NextToken();
 		if (auto prototype = ParsePrototype()) {
 			if (s_state.CurrentToken != '{') {
-				return LogErrorT<FunctionAST>("Expected {");
+				return LogErrorT<FunctionDeclAST>("Expected {");
 			}
 
 			NextToken(); // consumes {
 			if (auto body = ParseExprSemicolon()) {
 				if (s_state.CurrentToken != '}') {
-					return LogErrorT<FunctionAST>("Expected }");
+					return LogErrorT<FunctionDeclAST>("Expected }");
 				}
 
 				NextToken(); // consumes }
-				return std::make_unique<FunctionAST>(std::move(prototype), std::move(body));
+				return std::make_unique<FunctionDeclAST>(std::move(prototype), std::move(body));
 			}
 		}
 		return nullptr;
 	}
 
-	ExprASTPtr LogError(const char *msg) {
+	ExprPtr LogError(const char *msg) {
 		fprintf(stderr, ">> ERROR: %s\n", msg);
 		return nullptr;
 	}

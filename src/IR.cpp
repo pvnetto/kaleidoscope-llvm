@@ -151,7 +151,7 @@ namespace Parser {
 		return nullptr;
 	}
 
-	llvm::Function *PrototypeAST::GenerateCode() {
+	llvm::Function *PrototypeDeclAST::GenerateCode() {
 		// Creates vector of parameter types. Currently, all parameters are of type 'double'
 		std::vector<llvm::Type *> parameters{m_params.size(), llvm::Type::getDoubleTy(*IR::GetContext().LLVMContext)};
 
@@ -170,7 +170,7 @@ namespace Parser {
 		return function;
 	}
 
-	llvm::Function *FunctionAST::GenerateCode() {
+	llvm::Function *FunctionDeclAST::GenerateCode() {
 		// Looks for function prototype
 		llvm::Function *function = IR::GetContext().Module->getFunction(m_prototype->GetName());
 		function = function ? function : m_prototype->GenerateCode();
@@ -208,7 +208,7 @@ namespace Parser {
 		return nullptr;
 	}
 
-	void TranslationUnitAST::GenerateCode() {
+	void TranslationUnitDeclAST::GenerateCode() {
 		for (const auto &proto : m_prototypes)
 			proto->GenerateCode();
 

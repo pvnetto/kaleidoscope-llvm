@@ -32,7 +32,7 @@ namespace Parser {
 			arg->Dump(depth + 1);
 	}
 
-	void PrototypeAST::Dump(int depth) const {
+	void PrototypeDeclAST::Dump(int depth) const {
 		PrintSpacing(depth);
 		std::string displayName = m_name.empty() ? "__anonymous__" : m_name;
 		printf("- PrototypeAST: %s", displayName.c_str());
@@ -48,7 +48,7 @@ namespace Parser {
 		printf("\n");
 	}
 
-	void FunctionAST::Dump(int depth) const {
+	void FunctionDeclAST::Dump(int depth) const {
 		PrintSpacing(depth);
 		printf("- FunctionAST: \n");
 
@@ -56,7 +56,7 @@ namespace Parser {
 		m_body->Dump(depth + 1);
 	}
 
-	void TranslationUnitAST::Dump() const {
+	void TranslationUnitDeclAST::Dump() const {
 		printf("TranslationUnitAST: '%s'\n", m_name.c_str());
 		for (const auto &proto : m_prototypes)
 			proto->Dump(1);
@@ -69,14 +69,14 @@ namespace Parser {
 
 	VariableExprAST::VariableExprAST(const std::string &name) : m_name(name) {}
 
-	BinaryExprAST::BinaryExprAST(char op, ExprASTPtr lhs, ExprASTPtr rhs) : m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {}
+	BinaryExprAST::BinaryExprAST(char op, ExprPtr lhs, ExprPtr rhs) : m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {}
 
-	CallExprAST::CallExprAST(const std::string &name, std::vector<ExprASTPtr> args) : m_calleeName(name), m_args(std::move(args)) {}
+	CallExprAST::CallExprAST(const std::string &name, std::vector<ExprPtr> args) : m_calleeName(name), m_args(std::move(args)) {}
 
-	PrototypeAST::PrototypeAST(std::string name, std::vector<std::string> params) : m_name(name), m_params(params) {}
+	PrototypeDeclAST::PrototypeDeclAST(std::string name, std::vector<std::string> params) : m_name(name), m_params(params) {}
 
-	FunctionAST::FunctionAST(PrototypeASTPtr prototype, ExprASTPtr body) : m_prototype(std::move(prototype)), m_body(std::move(body)) {}
+	FunctionDeclAST::FunctionDeclAST(PrototypeASTPtr prototype, ExprPtr body) : m_prototype(std::move(prototype)), m_body(std::move(body)) {}
 
-	TranslationUnitAST::TranslationUnitAST(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs) :
+	TranslationUnitDeclAST::TranslationUnitDeclAST(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs) :
 		m_prototypes(std::move(protos)), m_functions(std::move(funcs)) {}
 }
