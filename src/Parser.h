@@ -4,31 +4,33 @@
 
 namespace Parser {
 
-    TranslationUnitASTPtr GenerateAST();
+	TranslationUnitASTPtr GenerateAST();
 
-    // #### AST parsers
-    NumberASTPtr ParseNumberExpr();
-    ExprPtr ParseIdentifierExpr();
+	// #### AST parsers
+	NumberASTPtr ParseNumberExpr();
+	ExprPtr ParseIdentifierExpr();
 
-    ExprPtr ParsePrimary();
-    ExprPtr ParseExpr();
+	ExprPtr ParsePrimary();
+	ExprPtr ParseExpr();
 	ExprPtr ParseExprSemicolon();
-    ExprPtr ParseParenthesisExpr();
-    ExprPtr ParseBinOpRHS(int minPrecedence, ExprPtr lhs);
+	ExprPtr ParseParenthesisExpr();
+	ExprPtr ParseBinOpRHS(int minPrecedence, ExprPtr lhs);
 	FunctionASTPtr ParseTopLevelExpr();
 
-    PrototypeASTPtr ParseExtern();
-    PrototypeASTPtr ParsePrototype();
-    FunctionASTPtr ParseDefinition();
+	StmtPtr ParseStmt();
+	ReturnStmtPtr ParseReturnStmt();
 
+	PrototypeASTPtr ParseExtern();
+	PrototypeASTPtr ParsePrototype();
+	FunctionASTPtr ParseDefinition();
 
-    // #### Helpers
-    ExprPtr LogError(const char* msg);
+	// #### Helpers
+	ExprPtr LogError(const char *msg);
 
-    template <typename T>
-    std::unique_ptr<T> LogErrorT(const char* msg) {
-        fprintf(stderr, ">> ERROR: %s\n", msg);
-        return nullptr;
-    }
+	template <typename T>
+	std::unique_ptr<T> LogErrorT(const char *msg) {
+		fprintf(stderr, ">> ERROR: %s\n", msg);
+		return nullptr;
+	}
 
 }

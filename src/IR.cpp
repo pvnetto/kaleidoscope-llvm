@@ -38,7 +38,7 @@ namespace IR {
 		void ResetModule() {
 			LLVMContext = std::make_unique<llvm::LLVMContext>();
 			Module = std::make_unique<llvm::Module>("KaleidoscopeDefaultModule", *LLVMContext);
-			Module->setDataLayout(JIT->getDataLayout());	// this doesn't bind the module to the JIT
+			Module->setDataLayout(JIT->getDataLayout()); // this doesn't bind the module to the JIT
 
 			Builder = std::make_unique<llvm::IRBuilder<>>(*LLVMContext);
 
@@ -151,6 +151,31 @@ namespace Parser {
 		return nullptr;
 	}
 
+	llvm::Value* ReturnStmtAST::GenerateCode() {
+		// Sets function return type
+		if (llvm::Value *returnValue = m_returnExpr->GenerateCode()) {
+			IR::GetContext().Builder->CreateRet(returnValue);
+			return returnValue;
+		}
+
+		printf(">> ERROR: Could not evaluate return statement.\n");
+		return nullptr;
+	}
+
+	llvm::Value *CompoundStmtAST::GenerateCode() {
+		// CompoundStmt requires at least one statement
+		if (m_statements.size() == 0)
+			return nullptr;
+
+		llvm::BasicBlock *parentBlock = IR::GetContext().Builder->GetInsertBlock();
+
+		for (auto &stmt : m_statements) stmt->GenerateCode();
+
+		// Handles nested blocks by setting insert point to block that was active before
+		IR::GetContext().Builder->SetInsertPoint(parentBlock);
+		return parentBlock;
+	}
+
 	llvm::Function *PrototypeDeclAST::GenerateCode() {
 		// Creates vector of parameter types. Currently, all parameters are of type 'double'
 		std::vector<llvm::Type *> parameters{m_params.size(), llvm::Type::getDoubleTy(*IR::GetContext().LLVMContext)};
@@ -178,8 +203,6 @@ namespace Parser {
 		if (function) {
 			// Creates new block
 			llvm::BasicBlock *functionBlock = llvm::BasicBlock::Create(*IR::GetContext().LLVMContext, "entry", function);
-
-			// Sets insert point, so all subsequent operations are applied to block
 			IR::GetContext().Builder->SetInsertPoint(functionBlock);
 
 			// Inserts variables inside block to current scope
@@ -187,24 +210,39 @@ namespace Parser {
 			for (auto &arg : function->args())
 				IR::GetContext().ValueMap[std::string(arg.getName())] = &arg;
 
-			// Sets function return type
-			if (llvm::Value *returnValue = m_body->GenerateCode()) {
-				IR::GetContext().Builder->CreateRet(returnValue);
+			if (llvm::Value *body = m_body->GenerateCode()) {
+				// Adds default return value when function has no return statement
+				bool shouldAddReturn = true;
+				llvm::Value* lastDoubleInst = nullptr;
+				for (auto &stmt : functionBlock->getInstList()) {
+					if (stmt.getType()->isDoubleTy()) {
+						lastDoubleInst = &stmt;
+					}
+					if (llvm::isa<llvm::ReturnInst>(stmt)) {
+						shouldAddReturn = false;
+						break;
+					}
+				}
 
+				if (shouldAddReturn) {
+					IR::GetContext().Builder->CreateRet(lastDoubleInst);
+				}
+
+				// Verifies correctness of function
 				llvm::verifyFunction(*function);
 
 				// Optimizes function in place, before it's even added to the module
 				IR::GetContext().OptimizationPasses->run(*function);
 
 				return function;
-			} else {
-				function->eraseFromParent();
-				printf(">> ERROR: Function has no return value");
-				return nullptr;
 			}
+
+			function->eraseFromParent();
+			printf(">> ERROR: Function has no body\n");
+			return nullptr;
 		}
 
-		printf(">> ERROR: Invalid function prototype");
+		printf(">> ERROR: Invalid function prototype\n");
 		return nullptr;
 	}
 

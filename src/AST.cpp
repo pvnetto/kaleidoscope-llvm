@@ -32,6 +32,19 @@ namespace Parser {
 			arg->Dump(depth + 1);
 	}
 
+	void ReturnStmtAST::Dump(int depth) const {
+		PrintSpacing(depth);
+		printf("- ReturnStmtAST:\n");
+		m_returnExpr->Dump(depth + 1);
+	}
+
+	void CompoundStmtAST::Dump(int depth) const {
+		PrintSpacing(depth);
+		printf("- CompoundStmtAST:\n");
+		for (const auto &stmt : m_statements)
+			stmt->Dump(depth + 1);
+	}
+
 	void PrototypeDeclAST::Dump(int depth) const {
 		PrintSpacing(depth);
 		std::string displayName = m_name.empty() ? "__anonymous__" : m_name;
@@ -73,10 +86,13 @@ namespace Parser {
 
 	CallExprAST::CallExprAST(const std::string &name, std::vector<ExprPtr> args) : m_calleeName(name), m_args(std::move(args)) {}
 
+	ReturnStmtAST::ReturnStmtAST(ExprPtr returnExpr) : m_returnExpr(std::move(returnExpr)) {}
+
+	CompoundStmtAST::CompoundStmtAST(std::vector<StmtPtr> stmts) : m_statements(std::move(stmts)) {}
+
 	PrototypeDeclAST::PrototypeDeclAST(std::string name, std::vector<std::string> params) : m_name(name), m_params(params) {}
 
-	FunctionDeclAST::FunctionDeclAST(PrototypeASTPtr prototype, ExprPtr body) : m_prototype(std::move(prototype)), m_body(std::move(body)) {}
+	FunctionDeclAST::FunctionDeclAST(PrototypeASTPtr prototype, CompoundStmtPtr body) : m_prototype(std::move(prototype)), m_body(std::move(body)) {}
 
-	TranslationUnitDeclAST::TranslationUnitDeclAST(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs) :
-		m_prototypes(std::move(protos)), m_functions(std::move(funcs)) {}
+	TranslationUnitDeclAST::TranslationUnitDeclAST(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs) : m_prototypes(std::move(protos)), m_functions(std::move(funcs)) {}
 }

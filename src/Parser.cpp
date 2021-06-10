@@ -198,11 +198,32 @@ namespace Parser {
 		return nullptr;
 	}
 
+	// Top-level expressions are represented as anonymous functions
 	FunctionASTPtr ParseTopLevelExpr() {
-		// Top-level expressions are represented as anonymous functions
-		if (auto expr = ParseExprSemicolon()) {
-			auto anonProto = std::make_unique<PrototypeDeclAST>(ANON_EXPR_NAME, std::vector<std::string>());
-			return std::make_unique<FunctionDeclAST>(std::move(anonProto), std::move(expr));
+		std::vector<StmtPtr> statements;
+		while (auto expr = ParseStmt()) {
+			statements.push_back(std::move(expr));
+		}
+
+		auto anonProto = std::make_unique<PrototypeDeclAST>(ANON_EXPR_NAME, std::vector<std::string>());
+		auto compoundStmt = std::make_unique<CompoundStmtAST>(std::move(statements));
+		return std::make_unique<FunctionDeclAST>(std::move(anonProto), std::move(compoundStmt));
+	}
+
+	StmtPtr ParseStmt() {
+		switch (s_state.CurrentToken) {
+			case Lexer::Token_Return:
+				return ParseReturnStmt();
+			default:
+				return ParseExprSemicolon();
+		}
+	}
+
+	ReturnStmtPtr ParseReturnStmt() {
+		NextToken();
+
+		if (auto returnExpr = ParseExprSemicolon()) {
+			return std::make_unique<ReturnStmtAST>(std::move(returnExpr));
 		}
 
 		return nullptr;
@@ -275,15 +296,19 @@ namespace Parser {
 				return LogErrorT<FunctionDeclAST>("Expected {");
 			}
 
-			NextToken(); // consumes {
-			if (auto body = ParseExprSemicolon()) {
-				if (s_state.CurrentToken != '}') {
-					return LogErrorT<FunctionDeclAST>("Expected }");
-				}
-
-				NextToken(); // consumes }
-				return std::make_unique<FunctionDeclAST>(std::move(prototype), std::move(body));
+			NextToken();                      // consumes {
+			std::vector<StmtPtr> statements; // TODO: Support statements
+			while (auto stmt = ParseStmt()) {
+				statements.push_back(std::move(stmt));
 			}
+
+			if (s_state.CurrentToken != '}') {
+				return LogErrorT<FunctionDeclAST>("Expected }");
+			}
+
+			NextToken(); // consumes }
+			CompoundStmtPtr compoundStmt = std::make_unique<CompoundStmtAST>(std::move(statements));
+			return std::make_unique<FunctionDeclAST>(std::move(prototype), std::move(compoundStmt));
 		}
 		return nullptr;
 	}

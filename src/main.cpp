@@ -7,19 +7,21 @@
 static std::string s_source = R"(
 # declaring externs
 extern sub(a, b);
-extern print();
 
 # sums both numbers together
 fn sum(a, b) {
 	a + b;
+	a - b;
+	return a * b;
 }
 
 fn someformula(a, b) {
-    (1 + 2) + (1 + 2) * (a + b);
+    return (1 + 2) + (1 + 2) * (a + b);
 }
 
 # calls sum
-sum(2.0 + 5.0 * 3.0, 7);
+sum(2.0, 3.0);
+someformula(2.0 + 5.0 * 3.0, 7);
 )";
 
 
