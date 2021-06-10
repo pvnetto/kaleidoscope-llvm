@@ -1,0 +1,14 @@
+{
+  Language: Cpp,
+  UseTab: ForIndentation,
+  NamespaceIndentation: All,
+  FixNamespaceComments: false,
+  IndentFunctionDeclarationAfterType: true,
+  IndentWidth: 4,
+  TabWidth: 4,
+  BreakBeforeBraces: Attach,
+  AllowShortIfStatementsOnASingleLine: true,
+  IndentCaseLabels: true,
+  ColumnLimit: 0,
+  AccessModifierOffset: -4,
+}
