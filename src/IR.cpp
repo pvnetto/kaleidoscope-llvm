@@ -116,9 +116,12 @@ namespace Parser {
 			case '/':
 				return ctx.Builder->CreateFDiv(lhsValue, rhsValue, "divtmp");
 			case '<':
-				// Converts float operation to boolean
-				lhsValue = ctx.Builder->CreateFCmpULT(lhsValue, rhsValue, "cmptmp");
-				return ctx.Builder->CreateUIToFP(lhsValue, llvm::Type::getDoubleTy(*IR::GetContext().LLVMContext), "booltmp");
+				// Converts float operation to integer boolean
+				lhsValue = ctx.Builder->CreateFCmpULT(lhsValue, rhsValue, "lttmp"); // ULT = unordered less than
+				return ctx.Builder->CreateFPToUI(lhsValue, llvm::Type::getInt1Ty(*IR::GetContext().LLVMContext), "booltmp");
+			case '>':
+				lhsValue = ctx.Builder->CreateFCmpUGT(lhsValue, rhsValue, "gttmp"); // UGT = unordered greater than
+				return ctx.Builder->CreateFPToUI(lhsValue, llvm::Type::getInt1Ty(*IR::GetContext().LLVMContext), "booltmp");
 			default:
 				printf(">> ERROR: Unknown binary operator\n");
 				return nullptr;
@@ -151,7 +154,7 @@ namespace Parser {
 		return nullptr;
 	}
 
-	llvm::Value* ReturnStmtAST::GenerateCode() {
+	llvm::Value *ReturnStmt::GenerateCode() {
 		// Sets function return type
 		if (llvm::Value *returnValue = m_returnExpr->GenerateCode()) {
 			IR::GetContext().Builder->CreateRet(returnValue);
@@ -162,14 +165,114 @@ namespace Parser {
 		return nullptr;
 	}
 
-	llvm::Value *CompoundStmtAST::GenerateCode() {
+	//llvm::Value *IfStmt::GenerateCode() {
+	//	auto &ctx = IR::GetContext();
+	//	auto &builder = ctx.Builder;
+
+	//	if (llvm::Value *conditionValue = m_condition->GenerateCode()) {
+	//		llvm::BasicBlock *parentBlock = builder->GetInsertBlock();
+	//		llvm::Function *parentFunction = parentBlock->getParent();
+
+	//		// Creates block for if statement
+	//		llvm::BasicBlock *ifBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "ifbb", parentFunction);
+	//		builder->SetInsertPoint(ifBlock);
+	//		m_body->GenerateCode();
+
+	//		// Creates block for else/else-if statement (optional)
+	//		llvm::BasicBlock *exitBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "exitbb", parentFunction);
+	//		if (m_else) {
+	//			if (IfStmt *elseIfStmt = dynamic_cast<IfStmt *>(m_else.get())) {
+	//				elseIfStmt->GenerateCodeSequence(exitBlock);
+	//			}
+	//			else {
+	//				llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "elsebb");
+	//				builder->SetInsertPoint(parentBlock);
+	//				builder->CreateCondBr(conditionValue, ifBlock, elseBlock); // branches from parent to if/else
+
+	//				// Generates else code
+	//				parentFunction->getBasicBlockList().push_back(elseBlock);
+	//				builder->SetInsertPoint(elseBlock);
+	//				m_else->GenerateCode();
+
+	//				// Exit block is called after all subsequent if/else statements are called, so it should either
+	//				// be called by an if with no elses or the final else statement (end)
+	//				builder->CreateBr(exitBlock); // back to exit block
+	//			}
+	//		}
+	//		else {
+	//			builder->SetInsertPoint(parentBlock);
+	//			builder->CreateCondBr(conditionValue, ifBlock, exitBlock); // branches from parent to if or exit
+	//		}
+
+	//		parentFunction->getBasicBlockList().push_back(exitBlock);
+	//		builder->SetInsertPoint(exitBlock);
+
+	//		return ifBlock;
+	//	}
+	//	return nullptr;
+	//}
+
+	llvm::Value *IfStmt::GenerateCode() {
+		auto &ctx = IR::GetContext();
+		auto &builder = ctx.Builder;
+
+		llvm::Function *function = builder->GetInsertBlock()->getParent();
+
+		llvm::BasicBlock *exitBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "exitbb");
+
+		llvm::Value* value = GenerateCodeSequence(exitBlock);
+		
+		function->getBasicBlockList().push_back(exitBlock);
+		builder->SetInsertPoint(exitBlock);
+
+		return value;
+	}
+
+	llvm::Value *IfStmt::GenerateCodeSequence(llvm::BasicBlock *exit) {
+		auto &ctx = IR::GetContext();
+		auto &builder = ctx.Builder;
+
+		if (llvm::Value *conditionValue = m_condition->GenerateCode()) {
+			llvm::BasicBlock *parentBlock = builder->GetInsertBlock();
+			llvm::Function *function = parentBlock->getParent();
+
+			// Creates block for if statement
+			llvm::BasicBlock *ifBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "ifbb", function);
+			builder->SetInsertPoint(ifBlock);
+			m_body->GenerateCode();
+
+			// Creates block for else/else-if statement (optional)
+			if (m_else) {
+				llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "elsebb", function);
+				builder->SetInsertPoint(parentBlock);
+				builder->CreateCondBr(conditionValue, ifBlock, elseBlock);		// branches from parent to if/else
+				builder->SetInsertPoint(elseBlock);
+
+				if (IfStmt *elseIfStmt = dynamic_cast<IfStmt *>(m_else.get())) {
+					elseIfStmt->GenerateCodeSequence(exit);
+				} else {
+					// Generates else code
+					m_else->GenerateCode();
+				}
+			} else {
+				builder->SetInsertPoint(parentBlock);
+				builder->CreateCondBr(conditionValue, ifBlock, exit);		 // branches from parent to if or exit
+			}
+
+			return ifBlock;
+		}
+		return nullptr;
+	}
+
+	llvm::Value *CompoundStmt::GenerateCode() {
 		// CompoundStmt requires at least one statement
 		if (m_statements.size() == 0)
 			return nullptr;
 
 		llvm::BasicBlock *parentBlock = IR::GetContext().Builder->GetInsertBlock();
 
-		for (auto &stmt : m_statements) stmt->GenerateCode();
+		for (auto &stmt : m_statements)
+			stmt->GenerateCode();
 
 		// Handles nested blocks by setting insert point to block that was active before
 		IR::GetContext().Builder->SetInsertPoint(parentBlock);
@@ -195,6 +298,33 @@ namespace Parser {
 		return function;
 	}
 
+	// Adds default return value when block has no control flow instruction
+	void AddDefaultReturn(llvm::Function *function) {
+		for (auto &block : function->getBasicBlockList()) {
+			llvm::Value *lastDoubleInst = nullptr;
+			bool noControlFlow = true;
+			for (auto &stmt : block.getInstList()) {
+				if (stmt.getType()->isDoubleTy()) {
+					lastDoubleInst = &stmt;
+				}
+				if (llvm::isa<llvm::ReturnInst>(stmt) || llvm::isa<llvm::BranchInst>(stmt)) {
+					noControlFlow = false;
+					break;
+				}
+			}
+
+			if (noControlFlow) {
+				IR::GetContext().Builder->SetInsertPoint(&block);
+
+				if (lastDoubleInst) {
+					IR::GetContext().Builder->CreateRet(lastDoubleInst);
+				} else {
+					IR::GetContext().Builder->CreateRetVoid();
+				}
+			}
+		}
+	}
+
 	llvm::Function *FunctionDeclAST::GenerateCode() {
 		// Looks for function prototype
 		llvm::Function *function = IR::GetContext().Module->getFunction(m_prototype->GetName());
@@ -202,8 +332,8 @@ namespace Parser {
 
 		if (function) {
 			// Creates new block
-			llvm::BasicBlock *functionBlock = llvm::BasicBlock::Create(*IR::GetContext().LLVMContext, "entry", function);
-			IR::GetContext().Builder->SetInsertPoint(functionBlock);
+			llvm::BasicBlock *entryBlock = llvm::BasicBlock::Create(*IR::GetContext().LLVMContext, "entry", function);
+			IR::GetContext().Builder->SetInsertPoint(entryBlock);
 
 			// Inserts variables inside block to current scope
 			IR::GetContext().ValueMap.clear();
@@ -211,28 +341,14 @@ namespace Parser {
 				IR::GetContext().ValueMap[std::string(arg.getName())] = &arg;
 
 			if (llvm::Value *body = m_body->GenerateCode()) {
-				// Adds default return value when function has no return statement
-				bool shouldAddReturn = true;
-				llvm::Value* lastDoubleInst = nullptr;
-				for (auto &stmt : functionBlock->getInstList()) {
-					if (stmt.getType()->isDoubleTy()) {
-						lastDoubleInst = &stmt;
-					}
-					if (llvm::isa<llvm::ReturnInst>(stmt)) {
-						shouldAddReturn = false;
-						break;
-					}
-				}
-
-				if (shouldAddReturn) {
-					IR::GetContext().Builder->CreateRet(lastDoubleInst);
-				}
+				// BEWARE: This changes insert point to block with no control flow
+				AddDefaultReturn(function);
 
 				// Verifies correctness of function
 				llvm::verifyFunction(*function);
 
-				// Optimizes function in place, before it's even added to the module
-				IR::GetContext().OptimizationPasses->run(*function);
+				// Optimizes function in place, before compiling the rest of the module
+				//IR::GetContext().OptimizationPasses->run(*function);
 
 				return function;
 			}

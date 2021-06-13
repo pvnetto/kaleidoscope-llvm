@@ -34,6 +34,10 @@ namespace Lexer {
 			return Token_Extern;
 		if (state.Identifier == "return")
 			return Token_Return;
+		if (state.Identifier == "if")
+			return Token_If;
+		if (state.Identifier == "else")
+			return Token_Else;
 		return Token_Identifier;
 	}
 

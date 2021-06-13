@@ -32,15 +32,25 @@ namespace Parser {
 			arg->Dump(depth + 1);
 	}
 
-	void ReturnStmtAST::Dump(int depth) const {
+	void ReturnStmt::Dump(int depth) const {
 		PrintSpacing(depth);
-		printf("- ReturnStmtAST:\n");
+		printf("- ReturnStmt:\n");
 		m_returnExpr->Dump(depth + 1);
 	}
 
-	void CompoundStmtAST::Dump(int depth) const {
+	void IfStmt::Dump(int depth) const {
 		PrintSpacing(depth);
-		printf("- CompoundStmtAST:\n");
+		printf("- IfStmt: %s\n", m_else ? "has_else" : "");
+		m_condition->Dump(depth + 1);
+		m_body->Dump(depth + 1);
+
+		if (m_else)
+			m_else->Dump(depth + 1);
+	}
+
+	void CompoundStmt::Dump(int depth) const {
+		PrintSpacing(depth);
+		printf("- CompoundStmt:\n");
 		for (const auto &stmt : m_statements)
 			stmt->Dump(depth + 1);
 	}
@@ -86,9 +96,12 @@ namespace Parser {
 
 	CallExprAST::CallExprAST(const std::string &name, std::vector<ExprPtr> args) : m_calleeName(name), m_args(std::move(args)) {}
 
-	ReturnStmtAST::ReturnStmtAST(ExprPtr returnExpr) : m_returnExpr(std::move(returnExpr)) {}
+	ReturnStmt::ReturnStmt(ExprPtr returnExpr) : m_returnExpr(std::move(returnExpr)) {}
 
-	CompoundStmtAST::CompoundStmtAST(std::vector<StmtPtr> stmts) : m_statements(std::move(stmts)) {}
+	IfStmt::IfStmt(ExprPtr cond, CompoundStmtPtr body, CompoundStmtPtr elseStmt) :
+		m_condition(std::move(cond)), m_body(std::move(body)), m_else(std::move(elseStmt)) {}
+
+	CompoundStmt::CompoundStmt(std::vector<StmtPtr> stmts) : m_statements(std::move(stmts)) {}
 
 	PrototypeDeclAST::PrototypeDeclAST(std::string name, std::vector<std::string> params) : m_name(name), m_params(params) {}
 

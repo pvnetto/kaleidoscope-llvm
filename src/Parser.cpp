@@ -72,15 +72,6 @@ namespace Parser {
 		return nullptr;
 	}
 
-	bool HasSemicolon() {
-		if (s_state.CurrentToken == ';') {
-			NextToken();
-			return true;
-		}
-
-		return false;
-	}
-
 	// Assumes it's only called when current token is a number
 	NumberASTPtr ParseNumberExpr() {
 		auto result = std::make_unique<NumberExprAST>(Lexer::GetNumberValue());
@@ -140,24 +131,9 @@ namespace Parser {
 		}
 	}
 
-	// Parses binary expressions
-	// <binop> ::= <operand> <operator> <operand>
-	// <binop> ::= <primary> <binop>
 	ExprPtr ParseExpr() {
 		if (auto lhs = ParsePrimary())
 			return ParseBinOpRHS(0, std::move(lhs));
-		return nullptr;
-	}
-
-	ExprPtr ParseExprSemicolon() {
-		if (auto expr = ParseExpr()) {
-			if (HasSemicolon()) {
-				return expr;
-			}
-
-			return LogError("Expected ;\n");
-		}
-
 		return nullptr;
 	}
 
@@ -200,30 +176,83 @@ namespace Parser {
 
 	// Top-level expressions are represented as anonymous functions
 	FunctionASTPtr ParseTopLevelExpr() {
-		std::vector<StmtPtr> statements;
-		while (auto expr = ParseStmt()) {
-			statements.push_back(std::move(expr));
+		if (auto compoundStmt = ParseStmts()) {
+			auto anonProto = std::make_unique<PrototypeDeclAST>(ANON_EXPR_NAME, std::vector<std::string>());
+			return std::make_unique<FunctionDeclAST>(std::move(anonProto), std::move(compoundStmt));
 		}
 
-		auto anonProto = std::make_unique<PrototypeDeclAST>(ANON_EXPR_NAME, std::vector<std::string>());
-		auto compoundStmt = std::make_unique<CompoundStmtAST>(std::move(statements));
-		return std::make_unique<FunctionDeclAST>(std::move(anonProto), std::move(compoundStmt));
+		return nullptr;
 	}
 
 	StmtPtr ParseStmt() {
 		switch (s_state.CurrentToken) {
 			case Lexer::Token_Return:
 				return ParseReturnStmt();
+			case Lexer::Token_If:
+				return ParseIfStmt();
 			default:
-				return ParseExprSemicolon();
+				return ExpectSemicolon(ParseExpr);
 		}
+	}
+
+	CompoundStmtPtr ParseStmts() {
+		std::vector<StmtPtr> statements;
+		while (auto expr = ParseStmt()) {
+			statements.push_back(std::move(expr));
+		}
+
+		return std::make_unique<CompoundStmt>(std::move(statements));
+	}
+
+	IfStmtPtr ParseIfStmtSingle() {
+		NextToken(); // consumes if
+
+		if (auto cond = ParseExpr()) {
+			if (auto compoundStmt = ExpectSurrounded('{', ParseStmts, '}')) {
+				return std::make_unique<IfStmt>(std::move(cond), std::move(compoundStmt));
+			}
+		}
+
+		return nullptr;
+	}
+
+	// Parses if/if else/else statements. 'Else if' statements are a special
+	// case of 'else' where the entire block is surrounded by an if statement.
+	IfStmtPtr ParseIfStmt() {
+		if (IfStmtPtr parentIf = ParseIfStmtSingle()) {
+
+			IfStmt *lastIf = parentIf.get();
+			while (s_state.CurrentToken == Lexer::Token_Else) {
+				NextToken();
+
+				// appends else statement to the last parsed if
+				if (s_state.CurrentToken == Lexer::Token_If) {
+					if (auto elseifStmt = ParseIfStmtSingle()) {
+						IfStmt *elseIfPtr = elseifStmt.get();
+						lastIf->SetElse(std::move(elseifStmt));
+						lastIf = elseIfPtr;
+						continue;	// checks for more else if/else statements
+					}
+				}
+				if (auto elseStmt = ExpectSurrounded('{', ParseStmts, '}')) {
+					lastIf->SetElse(std::move(elseStmt));
+					break;			// there should be no more else if/else
+				}
+
+				return nullptr;
+			}
+
+			return std::move(parentIf);
+		}
+
+		return nullptr;
 	}
 
 	ReturnStmtPtr ParseReturnStmt() {
 		NextToken();
 
-		if (auto returnExpr = ParseExprSemicolon()) {
-			return std::make_unique<ReturnStmtAST>(std::move(returnExpr));
+		if (auto returnExpr = ExpectSemicolon(ParseExpr)) {
+			return std::make_unique<ReturnStmt>(std::move(returnExpr));
 		}
 
 		return nullptr;
@@ -232,8 +261,8 @@ namespace Parser {
 	PrototypeASTPtr ParseExtern() {
 		NextToken();
 
-		if (auto proto = ParsePrototype()) {
-			return HasSemicolon() ? std::move(proto) : LogErrorT<PrototypeDeclAST>("Expected ;\n");
+		if (auto proto = ExpectSemicolon(ParsePrototype)) {
+			return proto;
 		}
 		return nullptr;
 	}
@@ -295,20 +324,17 @@ namespace Parser {
 			if (s_state.CurrentToken != '{') {
 				return LogErrorT<FunctionDeclAST>("Expected {");
 			}
+			NextToken(); // consumes {
 
-			NextToken();                      // consumes {
-			std::vector<StmtPtr> statements; // TODO: Support statements
-			while (auto stmt = ParseStmt()) {
-				statements.push_back(std::move(stmt));
+			if (auto compoundStmt = ParseStmts()) {
+				if (s_state.CurrentToken != '}') {
+					return LogErrorT<FunctionDeclAST>("Expected }");
+				}
+
+				NextToken(); // consumes }
+
+				return std::make_unique<FunctionDeclAST>(std::move(prototype), std::move(compoundStmt));
 			}
-
-			if (s_state.CurrentToken != '}') {
-				return LogErrorT<FunctionDeclAST>("Expected }");
-			}
-
-			NextToken(); // consumes }
-			CompoundStmtPtr compoundStmt = std::make_unique<CompoundStmtAST>(std::move(statements));
-			return std::make_unique<FunctionDeclAST>(std::move(prototype), std::move(compoundStmt));
 		}
 		return nullptr;
 	}
@@ -323,7 +349,7 @@ namespace Parser {
 // #### Operator-precedence parsing helpers
 namespace Parser {
 	static std::unordered_map<int, int> s_precedenceTable{
-	    {'<', 10}, {'+', 20}, {'-', 30}, {'*', 40}, {'/', 50}};
+	    {'<', 10}, { '>', 10 }, {'+', 20}, {'-', 30}, {'*', 40}, {'/', 50}};
 
 	int GetTokenPrecedence(int token) {
 		if (!__isascii(token) || s_precedenceTable[token] <= 0)

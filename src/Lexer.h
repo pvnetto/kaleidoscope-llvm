@@ -10,6 +10,8 @@ namespace Lexer {
 		Token_Definition,
 		Token_Extern,
         Token_Return,
+		Token_If,
+		Token_Else,
 
 		Token_Identifier,
 		Token_Number,

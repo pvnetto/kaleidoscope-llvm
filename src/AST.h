@@ -25,8 +25,8 @@ namespace Parser {
 	};
 	using ExprPtr = std::unique_ptr<Expr>;
 
-	// numeric literals
-	//		::= <number>
+	//	<literal>
+	// 		::= <digit> | <digit> <literal>
 	class NumberExprAST : public Expr {
 	public:
 		NumberExprAST(double value);
@@ -38,7 +38,7 @@ namespace Parser {
 	};
 	using NumberASTPtr = std::unique_ptr<NumberExprAST>;
 
-	// variable
+	//  <variable>
 	//		::= <id>
 	class VariableExprAST : public Expr {
 	public:
@@ -50,8 +50,8 @@ namespace Parser {
 		std::string m_name;
 	};
 
-	// binary expressions (i.e 1 + 2)
-	//		::= <lhs_expr> <operator> <rhs_expr>
+	// 	<binary_expr>
+	//		::= <number> [<operator> <binary_expr>]
 	class BinaryExprAST : public Expr {
 	public:
 		BinaryExprAST(char op, ExprPtr lhs, ExprPtr rhs);
@@ -59,11 +59,11 @@ namespace Parser {
 		virtual void Dump(int depth) const override;
 
 	private:
-		char m_op;            // +, -, *, /
-		ExprPtr m_lhs, m_rhs; // right/left-hand sides of expression
+		char m_op;
+		ExprPtr m_lhs, m_rhs;
 	};
 
-	// function call
+	//  <function_call>
 	//		::= <identifier>(<args>)
 	class CallExprAST : public Expr {
 	public:
@@ -76,12 +76,12 @@ namespace Parser {
 		std::vector<ExprPtr> m_args;
 	};
 
-	// compound statement
-	//		::= <stmt>, <stmt>, ...
-	class CompoundStmtAST : public Stmt {
+	// <stmts>
+	//		::= <stmt> [<stmts>]
+	class CompoundStmt : public Stmt {
 	public:
-		CompoundStmtAST() = default;
-		CompoundStmtAST(std::vector<StmtPtr> stmts);
+		CompoundStmt() = default;
+		CompoundStmt(std::vector<StmtPtr> stmts);
 
 		void AddStmt(StmtPtr stmt) { m_statements.push_back(std::move(stmt)); }
 
@@ -95,13 +95,13 @@ namespace Parser {
 	private:
 		std::vector<StmtPtr> m_statements;
 	};
-	using CompoundStmtPtr = std::unique_ptr<CompoundStmtAST>;
+	using CompoundStmtPtr = std::unique_ptr<CompoundStmt>;
 
-	// return
-	//		::= return <expr>
-	class ReturnStmtAST : public Stmt {
+	// <return>
+	//		::= 'return' <expr>
+	class ReturnStmt : public Stmt {
 	public:
-		ReturnStmtAST(ExprPtr returnExpr);
+		ReturnStmt(ExprPtr returnExpr);
 
 		virtual llvm::Value *GenerateCode() override;
 		virtual void Dump(int depth) const override;
@@ -109,21 +109,29 @@ namespace Parser {
 	private:
 		ExprPtr m_returnExpr;
 	};
-	using ReturnStmtPtr = std::unique_ptr<ReturnStmtAST>;
+	using ReturnStmtPtr = std::unique_ptr<ReturnStmt>;
 
-	////  if
-	////		::= if (<cond>) <expr>
-	////		::= if (<cond>) <expr> else <expr>
-	//class IfStmt : public Stmt {
-	//public:
-	//	IfStmt(ExprPtr cond, CompoundStmtPtr elseStmt);
+	//  <if>
+	//		::= 'if' (<cond>) <expr> ['else if' <expr>] ['else' <expr>]
+	class IfStmt : public Stmt {
+	public:
+		IfStmt(ExprPtr cond, CompoundStmtPtr body, CompoundStmtPtr elseStmt=nullptr);
 
-	//	inline bool HasElseStmt() { return m_else != nullptr; }
+		virtual llvm::Value *GenerateCode() override;
+		virtual void Dump(int depth) const override;
 
-	//private:
-	//	ExprPtr m_condition;
-	//	CompoundStmtPtr m_else;		// 'else if' is just a special case of 'else'
-	//};
+		// Generates code for sequential else if/else statements
+		llvm::Value *GenerateCodeSequence(llvm::BasicBlock* exit);
+
+
+		inline void SetElse(StmtPtr elseStmt) { m_else = std::move(elseStmt); } 
+
+	private:
+		ExprPtr m_condition;
+		CompoundStmtPtr m_body;
+		StmtPtr m_else; // 'else if' is just a special case of 'else'
+	};
+	using IfStmtPtr = std::unique_ptr<IfStmt>;
 
 	// prototypes
 	//		::= fn <id>(<args>)
@@ -143,7 +151,7 @@ namespace Parser {
 	using PrototypeASTPtr = std::unique_ptr<PrototypeDeclAST>;
 
 	// declarations
-	//		::= <prototype> { <stmt_list> }
+	//		::= <prototype> <stmts>
 	class FunctionDeclAST {
 	public:
 		FunctionDeclAST(PrototypeASTPtr prototype, CompoundStmtPtr body);
