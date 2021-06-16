@@ -48,6 +48,15 @@ namespace Parser {
 			m_else->Dump(depth + 1);
 	}
 
+	void ForStmt::Dump(int depth) const {
+		PrintSpacing(depth);
+		printf("- ForStmt: \n");
+		m_value->Dump(depth + 1);
+		m_condition->Dump(depth + 1);
+		m_step->Dump(depth + 1);
+		m_body->Dump(depth + 1);
+	}
+
 	void CompoundStmt::Dump(int depth) const {
 		PrintSpacing(depth);
 		printf("- CompoundStmt:\n");
@@ -100,6 +109,9 @@ namespace Parser {
 
 	IfStmt::IfStmt(ExprPtr cond, CompoundStmtPtr body, CompoundStmtPtr elseStmt) :
 		m_condition(std::move(cond)), m_body(std::move(body)), m_else(std::move(elseStmt)) {}
+
+	ForStmt::ForStmt(const std::string& varName, ExprPtr value, ExprPtr cond, ExprPtr step, CompoundStmtPtr body) : 
+		m_loopVarName(varName), m_value(std::move(value)), m_condition(std::move(cond)), m_step(std::move(step)), m_body(std::move(body)) {}
 
 	CompoundStmt::CompoundStmt(std::vector<StmtPtr> stmts) : m_statements(std::move(stmts)) {}
 

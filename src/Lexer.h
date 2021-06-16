@@ -13,6 +13,8 @@ namespace Lexer {
 		Token_If,
 		Token_Else,
 
+		Token_For,
+
 		Token_Identifier,
 		Token_Number,
 

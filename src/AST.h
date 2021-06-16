@@ -133,6 +133,23 @@ namespace Parser {
 	};
 	using IfStmtPtr = std::unique_ptr<IfStmt>;
 
+	//  <for>
+	//		::= for(<expr>;<cond>;<number>) <stmts>
+	class ForStmt : public Stmt {
+	public:
+		ForStmt(const std::string& loopVarName, ExprPtr value, ExprPtr cond, ExprPtr step, CompoundStmtPtr body);
+
+		virtual llvm::Value *GenerateCode() override;
+		virtual void Dump(int depth) const override;
+
+	private:
+		std::string m_loopVarName;
+		ExprPtr m_value, m_condition, m_step;
+		CompoundStmtPtr m_body;
+	};
+	using ForStmtPtr = std::unique_ptr<ForStmt>;
+
+
 	// prototypes
 	//		::= fn <id>(<args>)
 	class PrototypeDeclAST {

@@ -10,7 +10,7 @@ extern sub(a, b);
 
 # sums both numbers together
 fn sum(a, b) {
-	return a + b;	# returns last computed value by default
+	a + b;	# returns last computed value by default
 }
 
 fn max(a, b) {
@@ -40,14 +40,21 @@ fn clamp(value, min, max) {
 	return value;
 }
 
-fn someformula(a, b) {
-    return (1 + 2) + (1 + 2) * (a + b);
+fn testfor(a, b) {
+	for (i = 1; i < a; 1.0) {
+		if(i > b) {
+			return i;
+		}
+	}
+
+	return b;
 }
 
 # top-level expressions are supported
 sum(2.0, 3.0);
-someformula(2.0 + 5.0 * 3.0, 7);
+max(2.0 + 5.0 * 3.0, 7);
 clamp(20, 50, 100);
+testfor(1000.0, 10.0);
 )";
 
 

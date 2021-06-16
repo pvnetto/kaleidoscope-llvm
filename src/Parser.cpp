@@ -11,16 +11,23 @@ namespace Parser {
 
 namespace Parser {
 
+#define EXPECT_TOKEN(c, t)                                               \
+	if (s_state.CurrentToken != c) return LogErrorT<t>("Expected " + c); \
+	NextToken();
+
+#define EXPECT_TOKEN_ID(t)                                         \
+	if (s_state.CurrentToken != Lexer::Token_Identifier) return LogErrorT<t>("Expected identifier"); \
+	NextToken();
+
+// Checks current token but doesn't move to next
+#define CHECK_TOKEN(c, t) \
+	if (s_state.CurrentToken != c) return LogErrorT<t>("Expected " + c); \
+
+#define CHECK_TOKEN_ID(t) \
+	if (s_state.CurrentToken != Lexer::Token_Identifier) return LogErrorT<t>("Expected identifier"); \
+
 	struct State {
 		int CurrentToken;
-	};
-
-	struct ErrorMsg {
-		bool Failed = false;
-		std::string Msg = "";
-
-		ErrorMsg() = default;
-		ErrorMsg(std::string msg) : Failed(true), Msg(msg) {}
 	};
 
 	static State s_state;
@@ -126,6 +133,12 @@ namespace Parser {
 				return ParseIdentifierExpr();
 			case '(':
 				return ParseParenthesisExpr();
+			// Just ignore some symbols instead of issuing an error msg
+			case '}':
+			case ')':
+			case ';':
+			case Lexer::Token_EndOfFile:
+				return nullptr;
 			default:
 				return LogError("Unknown expression format");
 		}
@@ -190,6 +203,8 @@ namespace Parser {
 				return ParseReturnStmt();
 			case Lexer::Token_If:
 				return ParseIfStmt();
+			case Lexer::Token_For:
+				return ParseForStmt();
 			default:
 				return ExpectSemicolon(ParseExpr);
 		}
@@ -258,6 +273,30 @@ namespace Parser {
 		return nullptr;
 	}
 
+	ForStmtPtr ParseForStmt() {
+		NextToken();
+
+		EXPECT_TOKEN('(', ForStmt);
+		CHECK_TOKEN_ID(ForStmt);
+		std::string loopVarId = Lexer::GetIdentifier();
+		NextToken();
+		EXPECT_TOKEN('=', ForStmt);
+
+		ExprPtr valueExpr, condExpr, stepExpr;
+		if ((valueExpr = ExpectSemicolon(ParseExpr)),
+			(condExpr = ExpectSemicolon(ParseExpr)),
+		    (stepExpr = ParseExpr())) {
+
+			EXPECT_TOKEN(')', ForStmt);
+			
+			if (auto forBody = ExpectSurrounded('{', ParseStmts, '}')) {
+				return std::make_unique<ForStmt>(loopVarId, std::move(valueExpr), std::move(condExpr), std::move(stepExpr), std::move(forBody));
+			}
+		}
+
+		return nullptr;
+	}
+
 	PrototypeASTPtr ParseExtern() {
 		NextToken();
 
@@ -265,39 +304,6 @@ namespace Parser {
 			return proto;
 		}
 		return nullptr;
-	}
-
-	std::vector<std::string> ParseParameterList(ErrorMsg &errorMsg) {
-		if (s_state.CurrentToken != '(') {
-			errorMsg = {"Expected ("};
-			return {};
-		}
-
-		std::vector<std::string> params;
-		while (NextToken() != ')') {
-			if (s_state.CurrentToken == Lexer::Token_Identifier) {
-				params.push_back(Lexer::GetIdentifier());
-			} else {
-				errorMsg = {"Expected identifier"};
-				return {};
-			}
-			NextToken();
-
-			if (s_state.CurrentToken == ')') {
-				break;
-			}
-			if (s_state.CurrentToken != ',') {
-				errorMsg = {"Expected ')' or ','"};
-				return {};
-			}
-		}
-
-		if (s_state.CurrentToken != ')') {
-			errorMsg = {"Expected ')'"};
-			return {};
-		}
-		NextToken();
-		return params;
 	}
 
 	// prototype ::= <identifier>(<args>)
@@ -311,27 +317,35 @@ namespace Parser {
 		NextToken();
 
 		// Parses prototype parameter list
-		ErrorMsg err;
-		std::vector<std::string> params = ParseParameterList(err);
-		if (err.Failed)
-			return LogErrorT<PrototypeDeclAST>(err.Msg.c_str());
+		std::vector<std::string> params;
+		while (NextToken() != ')') {
+			CHECK_TOKEN_ID(PrototypeDeclAST);
+
+			params.push_back(Lexer::GetIdentifier());
+			NextToken();
+
+			if (s_state.CurrentToken == ')') {
+				break;
+			}
+
+			CHECK_TOKEN(',', PrototypeDeclAST);
+		}
+		EXPECT_TOKEN(')', PrototypeDeclAST);
+
 		return std::make_unique<PrototypeDeclAST>(funcIdentifier, std::move(params));
 	}
 
 	FunctionASTPtr ParseDefinition() {
 		NextToken();
 		if (auto prototype = ParsePrototype()) {
-			if (s_state.CurrentToken != '{') {
+			if (s_state.CurrentToken != '{')
 				return LogErrorT<FunctionDeclAST>("Expected {");
-			}
-			NextToken(); // consumes {
+			NextToken();
 
 			if (auto compoundStmt = ParseStmts()) {
-				if (s_state.CurrentToken != '}') {
-					return LogErrorT<FunctionDeclAST>("Expected }");
-				}
-
-				NextToken(); // consumes }
+				if (s_state.CurrentToken != '}')
+					return LogErrorT<FunctionDeclAST>("Expected {");
+				NextToken();
 
 				return std::make_unique<FunctionDeclAST>(std::move(prototype), std::move(compoundStmt));
 			}

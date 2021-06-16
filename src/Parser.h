@@ -20,12 +20,14 @@ namespace Parser {
 	CompoundStmtPtr ParseStmts();
 	IfStmtPtr ParseIfStmt();
 	ReturnStmtPtr ParseReturnStmt();
+	ForStmtPtr ParseForStmt();
 
 	PrototypeASTPtr ParseExtern();
 	PrototypeASTPtr ParsePrototype();
 	FunctionASTPtr ParseDefinition();
 
 	// #### Helpers
+
 	template <typename Func, typename R = std::result_of_t<Func && ()>>
 	R ExpectSurrounded(char a, Func func, char b) {
 		if (s_state.CurrentToken == a) {

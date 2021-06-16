@@ -165,53 +165,6 @@ namespace Parser {
 		return nullptr;
 	}
 
-	//llvm::Value *IfStmt::GenerateCode() {
-	//	auto &ctx = IR::GetContext();
-	//	auto &builder = ctx.Builder;
-
-	//	if (llvm::Value *conditionValue = m_condition->GenerateCode()) {
-	//		llvm::BasicBlock *parentBlock = builder->GetInsertBlock();
-	//		llvm::Function *parentFunction = parentBlock->getParent();
-
-	//		// Creates block for if statement
-	//		llvm::BasicBlock *ifBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "ifbb", parentFunction);
-	//		builder->SetInsertPoint(ifBlock);
-	//		m_body->GenerateCode();
-
-	//		// Creates block for else/else-if statement (optional)
-	//		llvm::BasicBlock *exitBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "exitbb", parentFunction);
-	//		if (m_else) {
-	//			if (IfStmt *elseIfStmt = dynamic_cast<IfStmt *>(m_else.get())) {
-	//				elseIfStmt->GenerateCodeSequence(exitBlock);
-	//			}
-	//			else {
-	//				llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "elsebb");
-	//				builder->SetInsertPoint(parentBlock);
-	//				builder->CreateCondBr(conditionValue, ifBlock, elseBlock); // branches from parent to if/else
-
-	//				// Generates else code
-	//				parentFunction->getBasicBlockList().push_back(elseBlock);
-	//				builder->SetInsertPoint(elseBlock);
-	//				m_else->GenerateCode();
-
-	//				// Exit block is called after all subsequent if/else statements are called, so it should either
-	//				// be called by an if with no elses or the final else statement (end)
-	//				builder->CreateBr(exitBlock); // back to exit block
-	//			}
-	//		}
-	//		else {
-	//			builder->SetInsertPoint(parentBlock);
-	//			builder->CreateCondBr(conditionValue, ifBlock, exitBlock); // branches from parent to if or exit
-	//		}
-
-	//		parentFunction->getBasicBlockList().push_back(exitBlock);
-	//		builder->SetInsertPoint(exitBlock);
-
-	//		return ifBlock;
-	//	}
-	//	return nullptr;
-	//}
-
 	llvm::Value *IfStmt::GenerateCode() {
 		auto &ctx = IR::GetContext();
 		auto &builder = ctx.Builder;
@@ -262,6 +215,40 @@ namespace Parser {
 			return ifBlock;
 		}
 		return nullptr;
+	}
+
+	llvm::Value* ForStmt::GenerateCode() {
+		auto &ctx = IR::GetContext();
+		auto &builder = ctx.Builder;
+
+		llvm::BasicBlock *entryBlock = builder->GetInsertBlock();
+		llvm::Function *function = entryBlock->getParent();
+
+		// Generates loop body
+		llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "loop", function);
+		builder->CreateBr(loopBlock);		// Branches from entry to loop
+		builder->SetInsertPoint(loopBlock);
+		m_body->GenerateCode();
+
+		// Phi node alternates its value depending on the last visited block
+		// https://mapping-high-level-constructs-to-llvm-ir.readthedocs.io/en/latest/control-structures/ssa-phi.html
+		llvm::PHINode *phiVar = builder->CreatePHI(llvm::Type::getDoubleTy(*ctx.LLVMContext), 2, m_loopVarName.c_str());
+		ctx.ValueMap[m_loopVarName] = phiVar; // Adds phi var to function scope
+		llvm::Value *startVal = m_value->GenerateCode();
+		phiVar->addIncoming(startVal, entryBlock);
+
+		// Increments loop variable by step
+		llvm::Value *step = m_step->GenerateCode();
+		llvm::Value *loopValue = builder->CreateFAdd(startVal, step);
+		phiVar->addIncoming(loopValue, loopBlock);
+
+		// Generates loop exit
+		llvm::BasicBlock* exitBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "loopexit", function);
+		builder->CreateCondBr(m_condition->GenerateCode(), exitBlock, loopBlock);
+
+		builder->SetInsertPoint(exitBlock);
+
+		return exitBlock;
 	}
 
 	llvm::Value *CompoundStmt::GenerateCode() {

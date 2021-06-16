@@ -38,6 +38,8 @@ namespace Lexer {
 			return Token_If;
 		if (state.Identifier == "else")
 			return Token_Else;
+		if (state.Identifier == "for")
+			return Token_For;
 		return Token_Identifier;
 	}
 
