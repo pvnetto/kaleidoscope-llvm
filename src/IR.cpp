@@ -171,10 +171,10 @@ namespace Parser {
 
 		llvm::Function *function = builder->GetInsertBlock()->getParent();
 
-		llvm::BasicBlock *exitBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "exitbb");
+		llvm::BasicBlock *exitBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "ifend");
 
-		llvm::Value* value = GenerateCodeSequence(exitBlock);
-		
+		llvm::Value *value = GenerateCodeSequence(exitBlock);
+
 		function->getBasicBlockList().push_back(exitBlock);
 		builder->SetInsertPoint(exitBlock);
 
@@ -198,7 +198,7 @@ namespace Parser {
 			if (m_else) {
 				llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "elsebb", function);
 				builder->SetInsertPoint(parentBlock);
-				builder->CreateCondBr(conditionValue, ifBlock, elseBlock);		// branches from parent to if/else
+				builder->CreateCondBr(conditionValue, ifBlock, elseBlock); // branches from parent to if/else
 				builder->SetInsertPoint(elseBlock);
 
 				if (IfStmt *elseIfStmt = dynamic_cast<IfStmt *>(m_else.get())) {
@@ -209,7 +209,7 @@ namespace Parser {
 				}
 			} else {
 				builder->SetInsertPoint(parentBlock);
-				builder->CreateCondBr(conditionValue, ifBlock, exit);		 // branches from parent to if or exit
+				builder->CreateCondBr(conditionValue, ifBlock, exit); // branches from parent to if or exit
 			}
 
 			return ifBlock;
@@ -217,18 +217,17 @@ namespace Parser {
 		return nullptr;
 	}
 
-	llvm::Value* ForStmt::GenerateCode() {
+	llvm::Value *ForStmt::GenerateCode() {
 		auto &ctx = IR::GetContext();
 		auto &builder = ctx.Builder;
 
 		llvm::BasicBlock *entryBlock = builder->GetInsertBlock();
 		llvm::Function *function = entryBlock->getParent();
 
-		// Generates loop body
+		// Generates loop block
 		llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "loop", function);
-		builder->CreateBr(loopBlock);		// Branches from entry to loop
+		builder->CreateBr(loopBlock);			// Branches from entry to loop
 		builder->SetInsertPoint(loopBlock);
-		m_body->GenerateCode();
 
 		// Phi node alternates its value depending on the last visited block
 		// https://mapping-high-level-constructs-to-llvm-ir.readthedocs.io/en/latest/control-structures/ssa-phi.html
@@ -237,18 +236,24 @@ namespace Parser {
 		llvm::Value *startVal = m_value->GenerateCode();
 		phiVar->addIncoming(startVal, entryBlock);
 
+		// Generates loop body
+		m_body->GenerateCode();
+
 		// Increments loop variable by step
+		llvm::BasicBlock* afterBodyBlock = builder->GetInsertBlock();	// Body code might change insertion block
 		llvm::Value *step = m_step->GenerateCode();
-		llvm::Value *loopValue = builder->CreateFAdd(startVal, step);
-		phiVar->addIncoming(loopValue, loopBlock);
+		llvm::Value *loopValue = builder->CreateFAdd(phiVar, step, "nextval");
 
 		// Generates loop exit
-		llvm::BasicBlock* exitBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "loopexit", function);
-		builder->CreateCondBr(m_condition->GenerateCode(), exitBlock, loopBlock);
+		llvm::BasicBlock *loopEndBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "loopend", function);
+		llvm::Value *endCondition = m_condition->GenerateCode();
+		builder->CreateCondBr(endCondition, loopBlock, loopEndBlock);
 
-		builder->SetInsertPoint(exitBlock);
+		builder->SetInsertPoint(loopEndBlock);
+		phiVar->addIncoming(loopValue, afterBodyBlock);
+		ctx.ValueMap.erase(m_loopVarName);
 
-		return exitBlock;
+		return loopEndBlock;
 	}
 
 	llvm::Value *CompoundStmt::GenerateCode() {
@@ -261,8 +266,6 @@ namespace Parser {
 		for (auto &stmt : m_statements)
 			stmt->GenerateCode();
 
-		// Handles nested blocks by setting insert point to block that was active before
-		IR::GetContext().Builder->SetInsertPoint(parentBlock);
 		return parentBlock;
 	}
 

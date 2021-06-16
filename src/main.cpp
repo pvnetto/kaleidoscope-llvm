@@ -43,7 +43,7 @@ fn clamp(value, min, max) {
 fn testfor(a, b) {
 	for (i = 1; i < a; 1.0) {
 		if(i > b) {
-			return i;
+			return b + i;
 		}
 	}
 
@@ -54,7 +54,7 @@ fn testfor(a, b) {
 sum(2.0, 3.0);
 max(2.0 + 5.0 * 3.0, 7);
 clamp(20, 50, 100);
-testfor(1000.0, 10.0);
+testfor(1000.0, 200.0);
 )";
 
 
