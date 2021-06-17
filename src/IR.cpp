@@ -285,7 +285,23 @@ namespace Parser {
 	}
 
 	llvm::Value* AssignStmt::GenerateCode() {
-		return nullptr;
+		auto &ctx = IR::GetContext();
+		auto &builder = ctx.Builder;
+		llvm::Function *function = ctx.Builder->GetInsertBlock()->getParent();
+
+		// Assignment statements will work like Python. If the variable
+		// exists, its values are modified. Otherwise, it's instantiated.
+		llvm::Value *result = m_rhs->GenerateCode();
+		for (const auto &lhs : m_lhs) {
+			auto &varAlloca = ctx.ValueMap[lhs->GetName()];
+			if (!varAlloca) {
+				varAlloca = IR::CreateEntryBlockAlloca(function, lhs->GetName());
+			}
+
+			builder->CreateStore(result, varAlloca);
+		}
+
+		return result;
 	}
 
 	llvm::Function *PrototypeDecl::GenerateCode() {

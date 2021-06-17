@@ -14,17 +14,18 @@ namespace Parser {
 	ExprPtr ParseExpr();
 	ExprPtr ParseParenthesisExpr();
 	ExprPtr ParseBinOpRHS(int minPrecedence, ExprPtr lhs);
-	FunctionASTPtr ParseTopLevelExpr();
+	FunctionDeclPtr ParseTopLevelExpr();
 
 	StmtPtr ParseStmt();
 	CompoundStmtPtr ParseStmts();
+	AssignStmtPtr ParseAssignStmt();
 	IfStmtPtr ParseIfStmt();
 	ReturnStmtPtr ParseReturnStmt();
 	ForStmtPtr ParseForStmt();
 
 	PrototypeASTPtr ParseExtern();
 	PrototypeASTPtr ParsePrototype();
-	FunctionASTPtr ParseDefinition();
+	FunctionDeclPtr ParseDefinition();
 
 	// #### Helpers
 

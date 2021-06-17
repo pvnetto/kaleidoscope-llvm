@@ -128,5 +128,5 @@ namespace Parser {
 
 	FunctionDecl::FunctionDecl(PrototypeASTPtr prototype, CompoundStmtPtr body) : m_prototype(std::move(prototype)), m_body(std::move(body)) {}
 
-	TranslationUnitDecl::TranslationUnitDecl(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs) : m_prototypes(std::move(protos)), m_functions(std::move(funcs)) {}
+	TranslationUnitDecl::TranslationUnitDecl(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionDeclPtr> funcs) : m_prototypes(std::move(protos)), m_functions(std::move(funcs)) {}
 }

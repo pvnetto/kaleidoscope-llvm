@@ -43,7 +43,7 @@ namespace Parser {
 		NextToken();
 
 		std::vector<PrototypeASTPtr> m_prototypes;
-		std::vector<FunctionASTPtr> m_functions;
+		std::vector<FunctionDeclPtr> m_functions;
 		while (true) {
 			switch (s_state.CurrentToken) {
 				case ';': // skips
@@ -100,24 +100,19 @@ namespace Parser {
 			while (s_state.CurrentToken != ')' && s_state.CurrentToken != ',') {
 				if (auto arg = ParseExpr()) {
 					args.push_back(std::move(arg));
-				} else {
+				}
+				else {
 					return LogError("Expected function arguments");
 				}
 
 				if (s_state.CurrentToken == ')')
 					break;
-				if (s_state.CurrentToken != ',')
-					return LogError("Expected ')' or ','");
 
-				NextToken();
+				EXPECT_TOKEN(',', Expr);
 			}
 
-			if (s_state.CurrentToken == ')') {
-				NextToken();
-				return std::make_unique<CallExpr>(identifier, std::move(args));
-			}
-
-			return LogError("Expected ')'");
+			EXPECT_TOKEN(')', Expr);
+			return std::make_unique<CallExpr>(identifier, std::move(args));
 		}
 		// variable
 		else {
@@ -188,13 +183,19 @@ namespace Parser {
 	}
 
 	// Top-level expressions are represented as anonymous functions
-	FunctionASTPtr ParseTopLevelExpr() {
+	FunctionDeclPtr ParseTopLevelExpr() {
 		if (auto compoundStmt = ParseStmts()) {
 			auto anonProto = std::make_unique<PrototypeDecl>(ANON_EXPR_NAME, std::vector<std::string>());
 			return std::make_unique<FunctionDecl>(std::move(anonProto), std::move(compoundStmt));
 		}
 
 		return nullptr;
+	}
+
+	StmtPtr ParseAssignOrExpr() {
+		if (Lexer::PeekToken() == '=')
+			return ParseAssignStmt();
+		return ExpectSemicolon(ParseExpr);
 	}
 
 	StmtPtr ParseStmt() {
@@ -205,6 +206,8 @@ namespace Parser {
 				return ParseIfStmt();
 			case Lexer::Token_For:
 				return ParseForStmt();
+			case Lexer::Token_Identifier:
+				return ParseAssignOrExpr();
 			default:
 				return ExpectSemicolon(ParseExpr);
 		}
@@ -217,6 +220,23 @@ namespace Parser {
 		}
 
 		return std::make_unique<CompoundStmt>(std::move(statements));
+	}
+
+	AssignStmtPtr ParseAssignStmt() {
+		std::vector<VariableExprPtr> lhsIDs;
+		while (s_state.CurrentToken == Lexer::Token_Identifier && Lexer::PeekToken() == '=') {
+			lhsIDs.push_back(std::make_unique<VariableExpr>(Lexer::GetIdentifier()));
+			NextToken();		// id
+			NextToken();		// =
+		}
+
+		if (lhsIDs.size() == 0) return LogErrorT<AssignStmt>("Expected lvalue");
+
+		if (auto expr = ExpectSemicolon(ParseExpr)) {
+			return std::make_unique<AssignStmt>(std::move(lhsIDs), std::move(expr));
+		}
+
+		return LogErrorT<AssignStmt>("Expected expression");
 	}
 
 	IfStmtPtr ParseIfStmtSingle() {
@@ -320,7 +340,6 @@ namespace Parser {
 		std::vector<std::string> params;
 		while (NextToken() != ')') {
 			CHECK_TOKEN_ID(PrototypeDecl);
-
 			params.push_back(Lexer::GetIdentifier());
 			NextToken();
 
@@ -335,18 +354,10 @@ namespace Parser {
 		return std::make_unique<PrototypeDecl>(funcIdentifier, std::move(params));
 	}
 
-	FunctionASTPtr ParseDefinition() {
+	FunctionDeclPtr ParseDefinition() {
 		NextToken();
 		if (auto prototype = ParsePrototype()) {
-			if (s_state.CurrentToken != '{')
-				return LogErrorT<FunctionDecl>("Expected {");
-			NextToken();
-
-			if (auto compoundStmt = ParseStmts()) {
-				if (s_state.CurrentToken != '}')
-					return LogErrorT<FunctionDecl>("Expected {");
-				NextToken();
-
+			if (auto compoundStmt = ExpectSurrounded('{', ParseStmts, '}')) {
 				return std::make_unique<FunctionDecl>(std::move(prototype), std::move(compoundStmt));
 			}
 		}

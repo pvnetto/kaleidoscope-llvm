@@ -8,12 +8,13 @@ static std::string s_source = R"(
 # declaring externs
 extern sub(a, b);
 
-# sums both numbers together
 fn sum(a, b) {
 	a + b;	# returns last computed value by default
 }
 
 fn max(a, b) {
+	x = 5;
+	w = z = a + b + x;
 	if(a > b) {
 		return a;
 	}
@@ -41,9 +42,11 @@ fn clamp(value, min, max) {
 }
 
 fn testfor(a, b) {
+	x = 0;
 	for (i = 1; i < a; 1.0) {
+		x = x + i;
 		if(i > b) {
-			return b + i;
+			return x;
 		}
 	}
 
@@ -51,7 +54,9 @@ fn testfor(a, b) {
 }
 
 # top-level expressions are supported
-sum(2.0, 3.0);
+x = 2.0;
+y = 3.0;
+sum(x, y);
 max(2.0 + 5.0 * 3.0, 7);
 clamp(20, 50, 100);
 testfor(1000.0, 200.0);

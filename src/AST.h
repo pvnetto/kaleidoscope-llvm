@@ -43,6 +43,9 @@ namespace Parser {
 	class VariableExpr : public Expr {
 	public:
 		VariableExpr(const std::string &name);
+
+		std::string GetName() const { return m_name; }
+
 		virtual llvm::Value *GenerateCode() override;
 		virtual void Dump(int depth) const override;
 
@@ -196,17 +199,17 @@ namespace Parser {
 		PrototypeASTPtr m_prototype;
 		CompoundStmtPtr m_body;
 	};
-	using FunctionASTPtr = std::unique_ptr<FunctionDecl>;
+	using FunctionDeclPtr = std::unique_ptr<FunctionDecl>;
 
 	class TranslationUnitDecl {
 	public:
-		TranslationUnitDecl(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs);
+		TranslationUnitDecl(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionDeclPtr> funcs);
 		void GenerateCode();
 		void Dump() const;
 
 	private:
 		std::string m_name;
-		std::vector<FunctionASTPtr> m_functions;
+		std::vector<FunctionDeclPtr> m_functions;
 		std::vector<PrototypeASTPtr> m_prototypes;
 	};
 	using TranslationUnitASTPtr = std::unique_ptr<TranslationUnitDecl>;
