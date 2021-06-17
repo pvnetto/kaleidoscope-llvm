@@ -8,6 +8,7 @@
 #include <llvm/IR/Verifier.h>
 
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Transforms/Utils.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
@@ -22,7 +23,7 @@ namespace IR {
 		std::unique_ptr<llvm::LLVMContext> LLVMContext;
 		std::unique_ptr<llvm::Module> Module;
 		std::unique_ptr<llvm::IRBuilder<>> Builder;
-		std::unordered_map<std::string, llvm::Value *> ValueMap; // Maps variables declared in current scope
+		std::unordered_map<std::string, llvm::AllocaInst *> ValueMap; // Maps variables declared in current scope
 
 		// Defines optimization passes for IR
 		std::unique_ptr<llvm::legacy::FunctionPassManager> OptimizationPasses;
@@ -43,6 +44,7 @@ namespace IR {
 			Builder = std::make_unique<llvm::IRBuilder<>>(*LLVMContext);
 
 			OptimizationPasses = std::make_unique<llvm::legacy::FunctionPassManager>(Module.get());
+			OptimizationPasses->add(llvm::createPromoteMemoryToRegisterPass());	 // mem2reg pass, promotes allocas to registers
 			OptimizationPasses->add(llvm::createInstructionCombiningPass());
 			OptimizationPasses->add(llvm::createReassociatePass());
 			OptimizationPasses->add(llvm::createGVNPass());
@@ -82,23 +84,36 @@ namespace IR {
 
 		ExitOnErr(resourceTracker->remove());
 	}
+
+	// Creates stack allocation for a variable. Allocas must ALWAYS
+	// be declared in the function's entry point, so that mem2reg optimization
+	// is able to optimize local variables into phi nodes.
+	llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Function* function, const std::string& varName) {
+		// Creates temporary builder on start of entry block
+		llvm::BasicBlock *entryBlock = &function->getEntryBlock();
+		llvm::IRBuilder<> tempBuilder { entryBlock, entryBlock->begin() };
+		
+		return tempBuilder.CreateAlloca(llvm::Type::getDoubleTy(*s_ir.LLVMContext), 0, varName.c_str());
+	}
 }
 
 namespace Parser {
 
-	llvm::Value *NumberExprAST::GenerateCode() {
+	llvm::Value *NumberExpr::GenerateCode() {
 		return llvm::ConstantFP::get(*IR::GetContext().LLVMContext, llvm::APFloat{m_value});
 	}
 
-	llvm::Value *VariableExprAST::GenerateCode() {
-		if (IR::GetContext().ValueMap.count(m_name) > 0)
-			return IR::GetContext().ValueMap[m_name];
+	llvm::Value *VariableExpr::GenerateCode() {
+		auto &ctx = IR::GetContext();
+		auto &varAlloca = ctx.ValueMap[m_name];
+		if (varAlloca)
+			return ctx.Builder->CreateLoad(varAlloca, m_name);
 
 		printf(">> ERROR: Unknown variable name\n");
 		return nullptr;
 	}
 
-	llvm::Value *BinaryExprAST::GenerateCode() {
+	llvm::Value *BinaryExpr::GenerateCode() {
 		llvm::Value *lhsValue = m_lhs->GenerateCode(), *rhsValue = m_rhs->GenerateCode();
 
 		if (!lhsValue || !rhsValue) {
@@ -129,9 +144,10 @@ namespace Parser {
 		return nullptr;
 	}
 
-	llvm::Value *CallExprAST::GenerateCode() {
+	llvm::Value *CallExpr::GenerateCode() {
 		// Checks if function is defined and arguments are valid
-		if (llvm::Function *calledFunction = IR::GetContext().Module->getFunction(m_calleeName)) {
+		auto &ctx = IR::GetContext();
+		if (llvm::Function *calledFunction = ctx.Module->getFunction(m_calleeName)) {
 			if (m_args.size() == calledFunction->arg_size()) {
 				std::vector<llvm::Value *> arguments;
 				for (const auto &arg : m_args) {
@@ -143,7 +159,7 @@ namespace Parser {
 					}
 				}
 
-				return IR::GetContext().Builder->CreateCall(calledFunction, arguments, "calltmp");
+				return ctx.Builder->CreateCall(calledFunction, arguments, "calltmp");
 			}
 
 			printf(">> ERROR: Called function with wrong number of arguments\n");
@@ -224,25 +240,25 @@ namespace Parser {
 		llvm::BasicBlock *entryBlock = builder->GetInsertBlock();
 		llvm::Function *function = entryBlock->getParent();
 
+		// Creates alloca for loop induction var. This eliminates the need for a Phi instruction.
+		auto &loopVarAlloca = ctx.ValueMap[m_loopVarName];
+		loopVarAlloca = IR::CreateEntryBlockAlloca(function, m_loopVarName);
+		llvm::Value *startVal = m_value->GenerateCode();
+		builder->CreateStore(startVal, loopVarAlloca);
+
 		// Generates loop block
 		llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "loop", function);
 		builder->CreateBr(loopBlock);			// Branches from entry to loop
 		builder->SetInsertPoint(loopBlock);
 
-		// Phi node alternates its value depending on the last visited block
-		// https://mapping-high-level-constructs-to-llvm-ir.readthedocs.io/en/latest/control-structures/ssa-phi.html
-		llvm::PHINode *phiVar = builder->CreatePHI(llvm::Type::getDoubleTy(*ctx.LLVMContext), 2, m_loopVarName.c_str());
-		ctx.ValueMap[m_loopVarName] = phiVar; // Adds phi var to function scope
-		llvm::Value *startVal = m_value->GenerateCode();
-		phiVar->addIncoming(startVal, entryBlock);
-
 		// Generates loop body
 		m_body->GenerateCode();
 
 		// Increments loop variable by step
-		llvm::BasicBlock* afterBodyBlock = builder->GetInsertBlock();	// Body code might change insertion block
 		llvm::Value *step = m_step->GenerateCode();
-		llvm::Value *loopValue = builder->CreateFAdd(phiVar, step, "nextval");
+		llvm::Value *currentLoopValue = builder->CreateLoad(loopVarAlloca, m_loopVarName);
+		llvm::Value *newLoopValue = builder->CreateFAdd(currentLoopValue, step, m_loopVarName);
+		builder->CreateStore(newLoopValue, loopVarAlloca);
 
 		// Generates loop exit
 		llvm::BasicBlock *loopEndBlock = llvm::BasicBlock::Create(*ctx.LLVMContext, "loopend", function);
@@ -250,8 +266,7 @@ namespace Parser {
 		builder->CreateCondBr(endCondition, loopBlock, loopEndBlock);
 
 		builder->SetInsertPoint(loopEndBlock);
-		phiVar->addIncoming(loopValue, afterBodyBlock);
-		ctx.ValueMap.erase(m_loopVarName);
+		ctx.ValueMap.erase(m_loopVarName);		// Removes loop induction var
 
 		return loopEndBlock;
 	}
@@ -269,7 +284,11 @@ namespace Parser {
 		return parentBlock;
 	}
 
-	llvm::Function *PrototypeDeclAST::GenerateCode() {
+	llvm::Value* AssignStmt::GenerateCode() {
+		return nullptr;
+	}
+
+	llvm::Function *PrototypeDecl::GenerateCode() {
 		// Creates vector of parameter types. Currently, all parameters are of type 'double'
 		std::vector<llvm::Type *> parameters{m_params.size(), llvm::Type::getDoubleTy(*IR::GetContext().LLVMContext)};
 
@@ -315,20 +334,25 @@ namespace Parser {
 		}
 	}
 
-	llvm::Function *FunctionDeclAST::GenerateCode() {
+	llvm::Function *FunctionDecl::GenerateCode() {
 		// Looks for function prototype
 		llvm::Function *function = IR::GetContext().Module->getFunction(m_prototype->GetName());
 		function = function ? function : m_prototype->GenerateCode();
 
+		auto &ctx = IR::GetContext();
+		auto &builder = ctx.Builder;
 		if (function) {
 			// Creates new block
 			llvm::BasicBlock *entryBlock = llvm::BasicBlock::Create(*IR::GetContext().LLVMContext, "entry", function);
-			IR::GetContext().Builder->SetInsertPoint(entryBlock);
+			builder->SetInsertPoint(entryBlock);
 
 			// Inserts variables inside block to current scope
-			IR::GetContext().ValueMap.clear();
-			for (auto &arg : function->args())
-				IR::GetContext().ValueMap[std::string(arg.getName())] = &arg;
+			ctx.ValueMap.clear();
+			for (auto &arg : function->args()) {
+				auto &varAlloca = ctx.ValueMap[arg.getName().str()];
+				varAlloca = IR::CreateEntryBlockAlloca(function, arg.getName().str());
+				builder->CreateStore(&arg, varAlloca);
+			}
 
 			if (llvm::Value *body = m_body->GenerateCode()) {
 				// BEWARE: This changes insert point to block with no control flow
@@ -338,7 +362,7 @@ namespace Parser {
 				llvm::verifyFunction(*function);
 
 				// Optimizes function in place, before compiling the rest of the module
-				//IR::GetContext().OptimizationPasses->run(*function);
+				ctx.OptimizationPasses->run(*function);
 
 				return function;
 			}
@@ -352,7 +376,7 @@ namespace Parser {
 		return nullptr;
 	}
 
-	void TranslationUnitDeclAST::GenerateCode() {
+	void TranslationUnitDecl::GenerateCode() {
 		for (const auto &proto : m_prototypes)
 			proto->GenerateCode();
 

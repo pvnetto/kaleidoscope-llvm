@@ -8,28 +8,44 @@ namespace Parser {
 		printf("%s", std::string(depth, '\t').c_str());
 	}
 
-	void NumberExprAST::Dump(int depth) const {
+	void NumberExpr::Dump(int depth) const {
 		PrintSpacing(depth);
-		printf("- NumberExprAST: %f\n", m_value);
+		printf("- NumberExpr: %f\n", m_value);
 	}
 
-	void VariableExprAST::Dump(int depth) const {
+	void VariableExpr::Dump(int depth) const {
 		PrintSpacing(depth);
-		printf("- VariableExprAST: '%s'\n", m_name.c_str());
+		printf("- VariableExpr: '%s'\n", m_name.c_str());
 	}
 
-	void BinaryExprAST::Dump(int depth) const {
+	void BinaryExpr::Dump(int depth) const {
 		PrintSpacing(depth);
-		printf("- BinaryExprAST: op = '%c'\n", m_op);
+		printf("- BinaryExpr: op = '%c'\n", m_op);
 		m_rhs->Dump(depth + 1);
 		m_lhs->Dump(depth + 1);
 	}
 
-	void CallExprAST::Dump(int depth) const {
+	void CallExpr::Dump(int depth) const {
 		PrintSpacing(depth);
-		printf("- CallExprAST: %s\n", m_calleeName.c_str());
+		printf("- CallExpr: %s\n", m_calleeName.c_str());
 		for (const auto &arg : m_args)
 			arg->Dump(depth + 1);
+	}
+
+	void CompoundStmt::Dump(int depth) const {
+		PrintSpacing(depth);
+		printf("- CompoundStmt:\n");
+		for (const auto &stmt : m_statements)
+			stmt->Dump(depth + 1);
+	}
+
+	void AssignStmt::Dump(int depth) const {
+		PrintSpacing(depth);
+		printf("- AssignStmt:\n");
+		for (const auto &lhs : m_lhs) {
+			lhs->Dump(depth + 1);
+		}
+		m_rhs->Dump(depth + 1);
 	}
 
 	void ReturnStmt::Dump(int depth) const {
@@ -57,17 +73,10 @@ namespace Parser {
 		m_body->Dump(depth + 1);
 	}
 
-	void CompoundStmt::Dump(int depth) const {
-		PrintSpacing(depth);
-		printf("- CompoundStmt:\n");
-		for (const auto &stmt : m_statements)
-			stmt->Dump(depth + 1);
-	}
-
-	void PrototypeDeclAST::Dump(int depth) const {
+	void PrototypeDecl::Dump(int depth) const {
 		PrintSpacing(depth);
 		std::string displayName = m_name.empty() ? "__anonymous__" : m_name;
-		printf("- PrototypeAST: %s", displayName.c_str());
+		printf("- PrototypeDecl: %s", displayName.c_str());
 
 		printf("(");
 		for (int i = 0; i < m_params.size(); i++) {
@@ -80,16 +89,16 @@ namespace Parser {
 		printf("\n");
 	}
 
-	void FunctionDeclAST::Dump(int depth) const {
+	void FunctionDecl::Dump(int depth) const {
 		PrintSpacing(depth);
-		printf("- FunctionAST: \n");
+		printf("- FunctionDecl: \n");
 
 		m_prototype->Dump(depth + 1);
 		m_body->Dump(depth + 1);
 	}
 
-	void TranslationUnitDeclAST::Dump() const {
-		printf("TranslationUnitAST: '%s'\n", m_name.c_str());
+	void TranslationUnitDecl::Dump() const {
+		printf("TranslationUnitDecl: '%s'\n", m_name.c_str());
 		for (const auto &proto : m_prototypes)
 			proto->Dump(1);
 
@@ -97,27 +106,27 @@ namespace Parser {
 			func->Dump(1);
 	}
 
-	NumberExprAST::NumberExprAST(double value) : m_value(value) {}
+	NumberExpr::NumberExpr(double value) : m_value(value) {}
 
-	VariableExprAST::VariableExprAST(const std::string &name) : m_name(name) {}
+	VariableExpr::VariableExpr(const std::string &name) : m_name(name) {}
 
-	BinaryExprAST::BinaryExprAST(char op, ExprPtr lhs, ExprPtr rhs) : m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {}
+	BinaryExpr::BinaryExpr(char op, ExprPtr lhs, ExprPtr rhs) : m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {}
 
-	CallExprAST::CallExprAST(const std::string &name, std::vector<ExprPtr> args) : m_calleeName(name), m_args(std::move(args)) {}
+	CallExpr::CallExpr(const std::string &name, std::vector<ExprPtr> args) : m_calleeName(name), m_args(std::move(args)) {}
 
 	ReturnStmt::ReturnStmt(ExprPtr returnExpr) : m_returnExpr(std::move(returnExpr)) {}
 
-	IfStmt::IfStmt(ExprPtr cond, CompoundStmtPtr body, CompoundStmtPtr elseStmt) :
-		m_condition(std::move(cond)), m_body(std::move(body)), m_else(std::move(elseStmt)) {}
+	IfStmt::IfStmt(ExprPtr cond, CompoundStmtPtr body, CompoundStmtPtr elseStmt) : m_condition(std::move(cond)), m_body(std::move(body)), m_else(std::move(elseStmt)) {}
 
-	ForStmt::ForStmt(const std::string& varName, ExprPtr value, ExprPtr cond, ExprPtr step, CompoundStmtPtr body) : 
-		m_loopVarName(varName), m_value(std::move(value)), m_condition(std::move(cond)), m_step(std::move(step)), m_body(std::move(body)) {}
+	ForStmt::ForStmt(const std::string &varName, ExprPtr value, ExprPtr cond, ExprPtr step, CompoundStmtPtr body) : m_loopVarName(varName), m_value(std::move(value)), m_condition(std::move(cond)), m_step(std::move(step)), m_body(std::move(body)) {}
 
 	CompoundStmt::CompoundStmt(std::vector<StmtPtr> stmts) : m_statements(std::move(stmts)) {}
 
-	PrototypeDeclAST::PrototypeDeclAST(std::string name, std::vector<std::string> params) : m_name(name), m_params(params) {}
+	AssignStmt::AssignStmt(std::vector<VariableExprPtr> lhs, ExprPtr rhs) : m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {}
 
-	FunctionDeclAST::FunctionDeclAST(PrototypeASTPtr prototype, CompoundStmtPtr body) : m_prototype(std::move(prototype)), m_body(std::move(body)) {}
+	PrototypeDecl::PrototypeDecl(std::string name, std::vector<std::string> params) : m_name(name), m_params(params) {}
 
-	TranslationUnitDeclAST::TranslationUnitDeclAST(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs) : m_prototypes(std::move(protos)), m_functions(std::move(funcs)) {}
+	FunctionDecl::FunctionDecl(PrototypeASTPtr prototype, CompoundStmtPtr body) : m_prototype(std::move(prototype)), m_body(std::move(body)) {}
+
+	TranslationUnitDecl::TranslationUnitDecl(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs) : m_prototypes(std::move(protos)), m_functions(std::move(funcs)) {}
 }

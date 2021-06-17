@@ -50,8 +50,8 @@ namespace Parser {
 					NextToken();
 					break;
 				case Lexer::Token_EndOfFile: {
-					std::unique_ptr<TranslationUnitDeclAST> unit =
-					    std::make_unique<TranslationUnitDeclAST>("main", std::move(m_prototypes), std::move(m_functions));
+					std::unique_ptr<TranslationUnitDecl> unit =
+					    std::make_unique<TranslationUnitDecl>("main", std::move(m_prototypes), std::move(m_functions));
 					unit->Dump();
 					return std::move(unit);
 				}
@@ -81,7 +81,7 @@ namespace Parser {
 
 	// Assumes it's only called when current token is a number
 	NumberASTPtr ParseNumberExpr() {
-		auto result = std::make_unique<NumberExprAST>(Lexer::GetNumberValue());
+		auto result = std::make_unique<NumberExpr>(Lexer::GetNumberValue());
 		NextToken();
 		return std::move(result);
 	}
@@ -114,14 +114,14 @@ namespace Parser {
 
 			if (s_state.CurrentToken == ')') {
 				NextToken();
-				return std::make_unique<CallExprAST>(identifier, std::move(args));
+				return std::make_unique<CallExpr>(identifier, std::move(args));
 			}
 
 			return LogError("Expected ')'");
 		}
 		// variable
 		else {
-			return std::make_unique<VariableExprAST>(identifier);
+			return std::make_unique<VariableExpr>(identifier);
 		}
 	}
 
@@ -166,7 +166,7 @@ namespace Parser {
 				lookahead = Lexer::PeekToken();
 			}
 
-			lhs = std::make_unique<BinaryExprAST>(op, std::move(lhs), std::move(rhs));
+			lhs = std::make_unique<BinaryExpr>(op, std::move(lhs), std::move(rhs));
 		}
 
 		return std::move(lhs);
@@ -190,8 +190,8 @@ namespace Parser {
 	// Top-level expressions are represented as anonymous functions
 	FunctionASTPtr ParseTopLevelExpr() {
 		if (auto compoundStmt = ParseStmts()) {
-			auto anonProto = std::make_unique<PrototypeDeclAST>(ANON_EXPR_NAME, std::vector<std::string>());
-			return std::make_unique<FunctionDeclAST>(std::move(anonProto), std::move(compoundStmt));
+			auto anonProto = std::make_unique<PrototypeDecl>(ANON_EXPR_NAME, std::vector<std::string>());
+			return std::make_unique<FunctionDecl>(std::move(anonProto), std::move(compoundStmt));
 		}
 
 		return nullptr;
@@ -310,7 +310,7 @@ namespace Parser {
 	// args ::= <id>, ...
 	PrototypeASTPtr ParsePrototype() {
 		if (s_state.CurrentToken != Lexer::Token_Identifier)
-			return LogErrorT<PrototypeDeclAST>("Expected function identifier");
+			return LogErrorT<PrototypeDecl>("Expected function identifier");
 
 		// Parses prototype identifier
 		std::string funcIdentifier = Lexer::GetIdentifier();
@@ -319,7 +319,7 @@ namespace Parser {
 		// Parses prototype parameter list
 		std::vector<std::string> params;
 		while (NextToken() != ')') {
-			CHECK_TOKEN_ID(PrototypeDeclAST);
+			CHECK_TOKEN_ID(PrototypeDecl);
 
 			params.push_back(Lexer::GetIdentifier());
 			NextToken();
@@ -328,26 +328,26 @@ namespace Parser {
 				break;
 			}
 
-			CHECK_TOKEN(',', PrototypeDeclAST);
+			CHECK_TOKEN(',', PrototypeDecl);
 		}
-		EXPECT_TOKEN(')', PrototypeDeclAST);
+		EXPECT_TOKEN(')', PrototypeDecl);
 
-		return std::make_unique<PrototypeDeclAST>(funcIdentifier, std::move(params));
+		return std::make_unique<PrototypeDecl>(funcIdentifier, std::move(params));
 	}
 
 	FunctionASTPtr ParseDefinition() {
 		NextToken();
 		if (auto prototype = ParsePrototype()) {
 			if (s_state.CurrentToken != '{')
-				return LogErrorT<FunctionDeclAST>("Expected {");
+				return LogErrorT<FunctionDecl>("Expected {");
 			NextToken();
 
 			if (auto compoundStmt = ParseStmts()) {
 				if (s_state.CurrentToken != '}')
-					return LogErrorT<FunctionDeclAST>("Expected {");
+					return LogErrorT<FunctionDecl>("Expected {");
 				NextToken();
 
-				return std::make_unique<FunctionDeclAST>(std::move(prototype), std::move(compoundStmt));
+				return std::make_unique<FunctionDecl>(std::move(prototype), std::move(compoundStmt));
 			}
 		}
 		return nullptr;

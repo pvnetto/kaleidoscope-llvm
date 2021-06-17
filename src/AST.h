@@ -27,34 +27,35 @@ namespace Parser {
 
 	//	<literal>
 	// 		::= <digit> | <digit> <literal>
-	class NumberExprAST : public Expr {
+	class NumberExpr : public Expr {
 	public:
-		NumberExprAST(double value);
+		NumberExpr(double value);
 		virtual llvm::Value *GenerateCode() override;
 		virtual void Dump(int depth) const override;
 
 	private:
 		double m_value;
 	};
-	using NumberASTPtr = std::unique_ptr<NumberExprAST>;
+	using NumberASTPtr = std::unique_ptr<NumberExpr>;
 
 	//  <variable>
 	//		::= <id>
-	class VariableExprAST : public Expr {
+	class VariableExpr : public Expr {
 	public:
-		VariableExprAST(const std::string &name);
+		VariableExpr(const std::string &name);
 		virtual llvm::Value *GenerateCode() override;
 		virtual void Dump(int depth) const override;
 
 	private:
 		std::string m_name;
 	};
+	using VariableExprPtr = std::unique_ptr<VariableExpr>;
 
 	// 	<binary_expr>
 	//		::= <number> [<operator> <binary_expr>]
-	class BinaryExprAST : public Expr {
+	class BinaryExpr : public Expr {
 	public:
-		BinaryExprAST(char op, ExprPtr lhs, ExprPtr rhs);
+		BinaryExpr(char op, ExprPtr lhs, ExprPtr rhs);
 		virtual llvm::Value *GenerateCode() override;
 		virtual void Dump(int depth) const override;
 
@@ -65,9 +66,9 @@ namespace Parser {
 
 	//  <function_call>
 	//		::= <identifier>(<args>)
-	class CallExprAST : public Expr {
+	class CallExpr : public Expr {
 	public:
-		CallExprAST(const std::string &name, std::vector<ExprPtr> args);
+		CallExpr(const std::string &name, std::vector<ExprPtr> args);
 		virtual llvm::Value *GenerateCode() override;
 		virtual void Dump(int depth) const override;
 
@@ -80,7 +81,6 @@ namespace Parser {
 	//		::= <stmt> [<stmts>]
 	class CompoundStmt : public Stmt {
 	public:
-		CompoundStmt() = default;
 		CompoundStmt(std::vector<StmtPtr> stmts);
 
 		void AddStmt(StmtPtr stmt) { m_statements.push_back(std::move(stmt)); }
@@ -96,6 +96,22 @@ namespace Parser {
 		std::vector<StmtPtr> m_statements;
 	};
 	using CompoundStmtPtr = std::unique_ptr<CompoundStmt>;
+
+
+	// <assign_stmt>
+	//		::= <variable> = [{ <variable> = }] <expr>
+	class AssignStmt : public Stmt {
+	public:
+		AssignStmt(std::vector<VariableExprPtr> lhs, ExprPtr rhs);
+
+		virtual llvm::Value *GenerateCode() override;
+		virtual void Dump(int depth) const override;
+
+	private:
+		std::vector<VariableExprPtr> m_lhs;
+		ExprPtr m_rhs;
+	};
+	using AssignStmtPtr = std::unique_ptr<AssignStmt>;
 
 	// <return>
 	//		::= 'return' <expr>
@@ -152,9 +168,9 @@ namespace Parser {
 
 	// prototypes
 	//		::= fn <id>(<args>)
-	class PrototypeDeclAST {
+	class PrototypeDecl {
 	public:
-		PrototypeDeclAST(std::string name, std::vector<std::string> params);
+		PrototypeDecl(std::string name, std::vector<std::string> params);
 
 		inline std::string GetName() const { return m_name; }
 
@@ -165,13 +181,13 @@ namespace Parser {
 		std::string m_name;
 		std::vector<std::string> m_params;
 	};
-	using PrototypeASTPtr = std::unique_ptr<PrototypeDeclAST>;
+	using PrototypeASTPtr = std::unique_ptr<PrototypeDecl>;
 
 	// declarations
 	//		::= <prototype> <stmts>
-	class FunctionDeclAST {
+	class FunctionDecl {
 	public:
-		FunctionDeclAST(PrototypeASTPtr prototype, CompoundStmtPtr body);
+		FunctionDecl(PrototypeASTPtr prototype, CompoundStmtPtr body);
 
 		llvm::Function *GenerateCode();
 		void Dump(int depth) const;
@@ -180,11 +196,11 @@ namespace Parser {
 		PrototypeASTPtr m_prototype;
 		CompoundStmtPtr m_body;
 	};
-	using FunctionASTPtr = std::unique_ptr<FunctionDeclAST>;
+	using FunctionASTPtr = std::unique_ptr<FunctionDecl>;
 
-	class TranslationUnitDeclAST {
+	class TranslationUnitDecl {
 	public:
-		TranslationUnitDeclAST(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs);
+		TranslationUnitDecl(const std::string &name, std::vector<PrototypeASTPtr> protos, std::vector<FunctionASTPtr> funcs);
 		void GenerateCode();
 		void Dump() const;
 
@@ -193,5 +209,5 @@ namespace Parser {
 		std::vector<FunctionASTPtr> m_functions;
 		std::vector<PrototypeASTPtr> m_prototypes;
 	};
-	using TranslationUnitASTPtr = std::unique_ptr<TranslationUnitDeclAST>;
+	using TranslationUnitASTPtr = std::unique_ptr<TranslationUnitDecl>;
 }
